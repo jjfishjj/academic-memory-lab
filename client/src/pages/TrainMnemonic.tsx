@@ -7,9 +7,13 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, RefreshCw, WandSparkles } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Download } from "lucide-react";
+import { toast } from "sonner";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
+import { generateAiMnemonicReferences, mnemonicAiAvailable } from "@/lib/mnemonicAi";
+import { removeMnemonicEntry, saveMnemonicEntry } from "@/lib/mnemonicLibrary";
+import { downloadMnemonicShareCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
@@ -21,6 +25,8 @@ interface Work {
   item: KnowledgeItem;
   style?: MnemonicStyle;
   mnemonic?: string;
+  rating?: number;
+  bookmarked?: boolean;
   recalled?: boolean | null;
 }
 
@@ -45,6 +51,8 @@ export default function TrainMnemonic() {
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
   const [ideaIndex, setIdeaIndex] = useState(0);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, string[]>>({});
+  const [aiLoading, setAiLoading] = useState(false);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
@@ -86,8 +94,65 @@ export default function TrainMnemonic() {
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
-  const references = current?.style ? getMnemonicReferences(current.item, current.style) : [];
+  const suggestionKey = current?.style ? `${current.item.id}:${current.style.id}` : "";
+  const offlineReferences = current?.style ? getMnemonicReferences(current.item, current.style) : [];
+  const references = aiSuggestions[suggestionKey] ?? offlineReferences;
   const currentReference = references[ideaIndex % Math.max(references.length, 1)];
+
+  const requestAiSuggestions = async () => {
+    if (!current?.style) return;
+    setAiLoading(true);
+    try {
+      const suggestions = await generateAiMnemonicReferences(current.item, current.style);
+      setAiSuggestions((all) => ({ ...all, [suggestionKey]: suggestions }));
+      setIdeaIndex(0);
+      toast.success("AI 已產生 3 個新靈感");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "AI 生成失敗，已保留離線答案");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const rateCurrent = (rating: number) => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    updateWork({ rating });
+    saveMnemonicEntry({
+      itemId: current.item.id,
+      term: current.item.term,
+      hint: current.item.hint,
+      styleId: current.style.id,
+      styleName: current.style.name,
+      mnemonic: current.mnemonic.trim(),
+      rating,
+      bookmarked: current.bookmarked ?? false,
+    });
+    toast.success(`已記錄好記度 ${rating} / 5`);
+  };
+
+  const toggleBookmark = () => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    const bookmarked = !current.bookmarked;
+    updateWork({ bookmarked });
+    saveMnemonicEntry({
+      itemId: current.item.id,
+      term: current.item.term,
+      hint: current.item.hint,
+      styleId: current.style.id,
+      styleName: current.style.name,
+      mnemonic: current.mnemonic.trim(),
+      rating: current.rating ?? 0,
+      bookmarked,
+    });
+    toast.success(bookmarked ? "已收藏到口訣庫" : "已取消收藏");
+  };
+
+  const discardCurrent = () => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    removeMnemonicEntry(current.item.id, current.style.id, current.mnemonic.trim());
+    updateWork({ mnemonic: "", rating: undefined, bookmarked: false });
+    toast("已淘汰這句，挑另一個或自己重寫吧");
+  };
 
   return (
     <TrainShell title="諧音口訣創作家" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
@@ -109,7 +174,7 @@ export default function TrainMnemonic() {
           <p className="text-muted-foreground mb-1">口訣 {idx + 1} / {works.length} 句</p>
           <p className="doodle-note text-xl mb-4">越冷的梗，黏性越強 →</p>
 
-          <div className="sticky-note sticky-yellow-bg p-6 max-w-2xl relative tilt-l2">
+          <div className="sticky-note sticky-yellow-bg p-4 sm:p-6 max-w-2xl relative tilt-l2">
             <div className="washi washi-yellow" />
             <h2 className="font-display font-extrabold text-2xl text-amber-900 mb-1">{current.item.term}</h2>
             <p className="text-amber-800 mb-4">{current.item.hint}{current.item.extra ? ` — ${current.item.extra}` : ""}</p>
@@ -129,21 +194,34 @@ export default function TrainMnemonic() {
                 <div className="flex items-start gap-3">
                   <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold uppercase tracking-wider text-amber-700">參考答案 · 可以直接用，也可以改成你的版本</p>
-                    <p className="mt-1 font-hand text-xl text-amber-900">{currentReference}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                        {aiSuggestions[suggestionKey] ? "AI 參考答案" : "離線參考答案"} · {ideaIndex + 1} / {references.length}
+                      </p>
+                      <Button type="button" size="sm" variant="ghost" disabled={!mnemonicAiAvailable || aiLoading}
+                        onClick={requestAiSuggestions}
+                        title={mnemonicAiAvailable ? "請 AI 重新產生三個答案" : "部署 AI 端點後即可使用"}
+                        className="h-8 rounded-full font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60">
+                        {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        {mnemonicAiAvailable ? "AI 生成 3 個" : "AI 待連線"}
+                      </Button>
+                    </div>
+                    <p className="mt-2 font-hand text-xl text-amber-900 break-words">{currentReference}</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button type="button" size="sm" variant="outline"
-                        onClick={() => updateWork({ mnemonic: currentReference })}
-                        className="rounded-full border-amber-500 bg-white/70 font-bold text-amber-800 hover:bg-amber-100">
+                        onClick={() => updateWork({ mnemonic: currentReference, rating: undefined, bookmarked: false })}
+                        className="w-full rounded-full border-amber-500 bg-white/70 font-bold text-amber-800 hover:bg-amber-100 sm:w-auto">
                         <WandSparkles className="h-3.5 w-3.5" /> 套用這句
                       </Button>
-                      {references.length > 1 && (
-                        <Button type="button" size="sm" variant="ghost"
-                          onClick={() => setIdeaIndex((i) => (i + 1) % references.length)}
-                          className="rounded-full font-bold text-amber-800 hover:bg-amber-100">
-                          <RefreshCw className="h-3.5 w-3.5" /> 換一個靈感
-                        </Button>
-                      )}
+                      <div className="flex justify-center gap-1 sm:justify-start" aria-label="切換參考答案">
+                        {references.map((_, referenceIndex) => (
+                          <button key={referenceIndex} type="button" onClick={() => setIdeaIndex(referenceIndex)}
+                            aria-label={`查看第 ${referenceIndex + 1} 個答案`}
+                            className={`h-8 min-w-8 rounded-full border-2 text-sm font-bold transition-colors ${referenceIndex === ideaIndex ? "border-amber-700 bg-amber-600 text-white" : "border-amber-400 bg-white/70 text-amber-800"}`}>
+                            {referenceIndex + 1}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -153,13 +231,38 @@ export default function TrainMnemonic() {
             <p className="text-sm font-bold text-amber-900 mb-2">寫下你的口訣（唸出來測試一下順不順口）：</p>
             <Textarea
               value={current.mnemonic ?? ""}
-              onChange={(e) => updateWork({ mnemonic: e.target.value })}
+              onChange={(e) => updateWork({ mnemonic: e.target.value, rating: undefined })}
               placeholder={`例：${current.style?.example ?? "ambulance → 俺不能死"}`}
-              className="bg-white/80 border-amber-300 min-h-20"
+              className="bg-white/80 border-amber-300 min-h-24 text-base"
             />
-            <div className="flex justify-end mt-4">
+            {current.mnemonic?.trim() && current.style && (
+              <div className="mt-3 rounded-xl bg-white/45 p-3">
+                <p className="mb-2 text-sm font-bold text-amber-900">這句好不好記？</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1" aria-label="好記度評分">
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <button key={rating} type="button" onClick={() => rateCurrent(rating)}
+                        aria-label={`${rating} 顆星`}
+                        className="rounded-full p-1.5 hover:bg-amber-100 active:scale-90">
+                        <Star className={`h-5 w-5 ${rating <= (current.rating ?? 0) ? "fill-amber-500 text-amber-600" : "text-amber-500"}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={toggleBookmark}
+                    className="rounded-full border-amber-400 bg-white/70 font-bold text-amber-800">
+                    <Bookmark className={`h-4 w-4 ${current.bookmarked ? "fill-amber-600" : ""}`} />
+                    {current.bookmarked ? "已收藏" : "收藏"}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={discardCurrent}
+                    className="rounded-full font-bold text-red-700 hover:bg-red-50 hover:text-red-800">
+                    <Trash2 className="h-4 w-4" /> 淘汰重寫
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-stretch sm:justify-end mt-4">
               <Button onClick={nextCreate} disabled={!current.mnemonic?.trim()}
-                className="font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform">
+                className="w-full font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform sm:w-auto">
                 {idx < works.length - 1 ? "下一個知識點" : "進入提取測驗"} <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -247,6 +350,12 @@ export default function TrainMnemonic() {
                   <div>
                     <p className="font-display font-bold">{w.item.term} <span className="text-muted-foreground font-normal text-sm">— {w.item.hint}</span></p>
                     <p className="font-hand text-lg text-muted-foreground">{w.style?.emoji} "{w.mnemonic}"</p>
+                    {(w.rating || w.bookmarked) && (
+                      <p className="mt-1 text-xs font-bold text-amber-700">
+                        {w.rating ? `好記度 ${"★".repeat(w.rating)}${"☆".repeat(5 - w.rating)}` : "尚未評分"}
+                        {w.bookmarked ? " · 🔖 已收藏" : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -254,6 +363,21 @@ export default function TrainMnemonic() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
+            <Button onClick={() => {
+              try {
+                downloadMnemonicShareCard(works.map((w) => ({
+                  term: w.item.term,
+                  hint: w.item.hint,
+                  mnemonic: w.mnemonic ?? "",
+                  rating: w.rating,
+                })));
+                toast.success("分享卡已下載");
+              } catch {
+                toast.error("分享卡下載失敗，請稍後再試");
+              }
+            }} size="lg" variant="outline" className="font-display font-bold rounded-full px-8 border-2 active:scale-[0.97] transition-transform">
+              <Download className="w-4 h-4" /> 下載成果分享卡
+            </Button>
             <Button onClick={restart} size="lg" className="font-display font-bold rounded-full px-8 active:scale-[0.97] transition-transform">
               <RotateCcw className="w-4 h-4" /> 再來一輪
             </Button>

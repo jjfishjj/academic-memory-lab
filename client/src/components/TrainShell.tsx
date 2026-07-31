@@ -31,7 +31,8 @@ export default function TrainShell({ title, steps, stepIndex, stepColor, badge, 
           </Link>
           <div className="flex items-center gap-2">
             <img src={LOGO} alt="" className="w-6 h-6" />
-            <span className="font-display font-bold text-sm">記憶手帳社 · {title}</span>
+            <span className="hidden font-display font-bold text-sm sm:inline">記憶手帳社 · {title}</span>
+            <span className="font-display font-bold text-xs sm:hidden">{title}</span>
           </div>
           <span className="font-hand text-lg text-primary">{badge ?? ""}</span>
         </div>

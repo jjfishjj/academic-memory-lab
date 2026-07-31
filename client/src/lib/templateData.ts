@@ -210,8 +210,20 @@ export function getMnemonicReferences(item: KnowledgeItem, style: MnemonicStyle)
     meme: `沒人：…… ${item.term}：我就是「${item.hint}」本人。`,
     "story-chain": `${item.term} → 抓出關鍵字頭，串成一幕和「${item.hint}」有關的荒謬故事`,
   };
+  const alternate: MnemonicReferenceByStyle = {
+    homophone: `把「${item.term}」唸快一點，想像近音角色大喊：${item.hint}！`,
+    rhyme: `${item.term} 唸三遍，${item.hint} 就出現`,
+    meme: `傳說中的 ${item.term}：表面很普通，實際上是「${item.hint}」。`,
+    "story-chain": `先抓「${item.term}」的三個關鍵字頭，再讓它們依序演出「${item.hint}」`,
+  };
+  const visual: MnemonicReferenceByStyle = {
+    homophone: `${item.term} → 用最像的中文聲音，配上一幕「${item.hint}」的誇張畫面`,
+    rhyme: `看到 ${item.term} 不發愁，想到「${item.hint}」就點頭`,
+    meme: `老師：請解釋 ${item.term}。我：這不就是「${item.hint}」的迷因本因？`,
+    "story-chain": `${item.term} 的字頭排隊出發，最後一起找到「${item.hint}」`,
+  };
 
-  return tailored ? [tailored, generic[style.id]] : [generic[style.id]];
+  return [tailored ?? generic[style.id], alternate[style.id], visual[style.id]];
 }
 
 /* ---------------- 劇本殺：劇本設定 ---------------- */
