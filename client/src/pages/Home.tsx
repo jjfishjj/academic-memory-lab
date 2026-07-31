@@ -191,8 +191,8 @@ export default function Home() {
           <h2 className="font-display font-extrabold text-3xl mb-12">雙卡記憶任務 · 四步走</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { n: "01", icon: "🎒", title: "選學科包", desc: "英文單字、歷史事件或化學元素，挑一包最讓你頭痛的。", tilt: "tilt-l" },
-              { n: "02", icon: "📍", title: "掛進場景", desc: "選一個校園角落，把每個知識點「掛」到具體物件上，寫下你的畫面。", tilt: "tilt-r" },
+              { n: "01", icon: "🎒", title: "選學科包", desc: "挑官方練習包，或把你自己的單字表、筆記貼進來做成專屬卡包。", tilt: "tilt-l" },
+              { n: "02", icon: "📍", title: "掛進場景", desc: "選一個校園角落，或自己寫一個熟悉的地方，把知識點「掛」上去。", tilt: "tilt-r" },
               { n: "03", icon: "�propos", title: "綁上情緒", desc: "為知識點選一種情緒，用模板編一句迷你故事，讓杏仁核幫你蓋「重要」章。", tilt: "tilt-l2" },
               { n: "04", icon: "🙈", title: "遮住回想", desc: "關掉所有提示，只靠場景與情緒線索回想。答對蓋章、連擊加分。", tilt: "tilt-r" },
             ].map((s, i) => (

@@ -5,14 +5,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, MapPin, Heart, EyeOff, RotateCcw, Home as HomeIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Heart, EyeOff, RotateCcw, Home as HomeIcon, Plus, Trash2, Sparkles } from "lucide-react";
 import {
   SUBJECT_PACKS, CAMPUS_SCENES, EMOTIONS,
   loadStats, saveStats,
+  loadCustomPacks, deleteCustomPack,
   type SubjectPack, type CampusScene, type Emotion, type KnowledgeItem,
 } from "@/lib/gameData";
+import CustomPackBuilder from "@/components/CustomPackBuilder";
 
 const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
 const STAMP = "/manus-storage/stamp-success_0e7612b4.png";
@@ -41,6 +44,10 @@ export default function Game() {
   const [phase, setPhase] = useState<Phase>("pack");
   const [pack, setPack] = useState<SubjectPack | null>(null);
   const [scene, setScene] = useState<CampusScene | null>(null);
+  const [customPacks, setCustomPacks] = useState<SubjectPack[]>(() => loadCustomPacks());
+  const [building, setBuilding] = useState(false);
+  const [customSceneName, setCustomSceneName] = useState("");
+  const [customSpot, setCustomSpot] = useState("");
   const [works, setWorks] = useState<ItemWork[]>([]);
   const [idx, setIdx] = useState(0); // 目前處理的知識點索引
   const [revealed, setRevealed] = useState(false); // 回想階段是否已翻開
@@ -64,6 +71,7 @@ export default function Game() {
   };
 
   const nextItemOr = (nextPhase: Phase) => {
+    setCustomSpot("");
     if (idx < works.length - 1) {
       setIdx(idx + 1);
     } else {
@@ -103,6 +111,19 @@ export default function Game() {
   const restart = () => {
     setPhase("pack"); setPack(null); setScene(null);
     setWorks([]); setIdx(0); setCombo(0); setBestCombo(0); setRevealed(false);
+    setBuilding(false); setCustomSceneName(""); setCustomSpot("");
+    setCustomPacks(loadCustomPacks());
+  };
+
+  const removeCustomPack = (id: string) => {
+    deleteCustomPack(id);
+    setCustomPacks(loadCustomPacks());
+  };
+
+  const startCustomScene = () => {
+    const n = customSceneName.trim();
+    if (!n) return;
+    setScene({ id: `custom-${Date.now()}`, name: n, emoji: "⭐", spots: [] });
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
@@ -151,7 +172,56 @@ export default function Game() {
           <div>
             <p className="font-hand text-2xl text-primary mb-1">step 1 — pick your pain 🎒</p>
             <h1 className="font-display font-extrabold text-3xl mb-2">先挑一包最讓你頭痛的</h1>
-            <p className="text-muted-foreground mb-8">放心，等一下我們會一起把它們變好記。每包 5 個知識點，整輪大約 8 分鐘。</p>
+            <p className="text-muted-foreground mb-8">放心，等一下我們會一起把它們變好記。也可以把「你自己的筆記」做成卡包。</p>
+
+            {building ? (
+              <CustomPackBuilder
+                onCreated={(p) => { setBuilding(false); setCustomPacks(loadCustomPacks()); startPack(p); }}
+                onCancel={() => setBuilding(false)}
+              />
+            ) : (
+            <>
+            {/* 自建卡包入口 */}
+            <button onClick={() => setBuilding(true)}
+              className="sticky-note sticky-yellow-bg tilt-r p-5 mb-8 w-full max-w-2xl text-left group relative block">
+              <div className="washi washi-yellow" />
+              <div className="flex items-center gap-4">
+                <span className="text-4xl">✂️</span>
+                <div className="flex-1">
+                  <h3 className="font-display font-bold text-xl text-amber-900 group-hover:underline decoration-wavy underline-offset-4">
+                    <Sparkles className="w-4 h-4 inline -mt-1" /> 做一包自己的知識點
+                  </h3>
+                  <p className="text-sm text-amber-800">把你的單字表、筆記、考點貼進來，變成專屬任務卡包（會存在你的瀏覽器）</p>
+                </div>
+                <Plus className="w-6 h-6 text-amber-700 shrink-0" />
+              </div>
+            </button>
+
+            {/* 我的卡包 */}
+            {customPacks.length > 0 && (
+              <div className="mb-8">
+                <p className="doodle-note text-xl mb-3">my packs — 我做過的卡包 ✎</p>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {customPacks.map((p, i) => (
+                    <div key={p.id} className={`paper-card ${i % 2 === 0 ? "tilt-l2" : "tilt-r"} p-6 relative group`}>
+                      <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
+                      <button onClick={() => removeCustomPack(p.id)} aria-label="刪除卡包"
+                        className="absolute top-3 right-3 p-1.5 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <div className="text-4xl mb-3">{p.emoji}</div>
+                      <h3 className="font-display font-bold text-xl mb-1">{p.name}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
+                      <button onClick={() => startPack(p)} className="doodle-note text-xl inline-flex items-center gap-1 hover:text-primary transition-colors">
+                        開始任務 <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="doodle-note text-xl mb-3">starter packs — 官方練習包 ✎</p>
             <div className="grid md:grid-cols-3 gap-6">
               {SUBJECT_PACKS.map((p, i) => (
                 <button key={p.id} onClick={() => startPack(p)}
@@ -165,6 +235,8 @@ export default function Game() {
               ))}
             </div>
             <p className="doodle-note text-2xl mt-10 text-center">↑ 越怕哪包，越該選哪包 ↑</p>
+            </>
+            )}
           </div>
         )}
 
@@ -178,7 +250,7 @@ export default function Game() {
 
             {!scene ? (
               <>
-                <p className="text-muted-foreground mb-6">閉上眼想一個你每天都會經過的地方——等一下這 5 個知識點都會搬進去住。</p>
+                <p className="text-muted-foreground mb-6">閉上眼想一個你每天都會經過的地方——等一下這 {works.length} 個知識點都會搬進去住。</p>
                 <div className="paper-card tilt-r relative max-w-md mb-8 overflow-hidden hidden md:block">
                   <span className="tape-corner tape-tl" />
                   <img src={CAMPUS} alt="手繪校園地圖" className="w-full h-36 object-cover rounded-md" />
@@ -192,6 +264,22 @@ export default function Game() {
                       <p className="font-display font-bold group-hover:text-primary transition-colors">{s.name}</p>
                     </button>
                   ))}
+                </div>
+
+                {/* 自訂場景 */}
+                <div className="sticky-note sticky-yellow-bg tilt-l2 p-5 mt-6 max-w-xl relative">
+                  <div className="washi washi-yellow" />
+                  <p className="font-display font-bold text-amber-900 mb-1">⭐ 或者，寫一個你自己的地方</p>
+                  <p className="text-sm text-amber-800 mb-3">越熟悉越好——你的房間、通勤路線、打工的店、常去的咖啡廳…</p>
+                  <div className="flex gap-2">
+                    <Input value={customSceneName} onChange={(e) => setCustomSceneName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") startCustomScene(); }}
+                      placeholder="例：我的房間、捷運通勤路上…" className="bg-white/80 border-amber-300 flex-1" />
+                    <Button onClick={startCustomScene} disabled={!customSceneName.trim()}
+                      className="font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform shrink-0">
+                      就是這裡 <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </>
             ) : current && (
@@ -215,11 +303,21 @@ export default function Game() {
                     ))}
                   </div>
 
+                  {/* 自訂掛鉤位置 */}
+                  <div className="flex gap-2 mb-4">
+                    <Input
+                      value={current.spot && !scene.spots.includes(current.spot) ? current.spot : customSpot}
+                      onChange={(e) => { setCustomSpot(e.target.value); updateWork({ spot: e.target.value.trim() || undefined }); }}
+                      placeholder={scene.spots.length > 0 ? "或自己寫一個位置：例如窗台、書桌抽屜…" : "寫一個這裡的具體位置：例如門把、書桌、鏡子前…"}
+                      className="bg-white/80 border-amber-300 border-dashed flex-1"
+                    />
+                  </div>
+
                   <p className="text-sm font-bold text-amber-900 mb-2">用一句話描述你腦中的畫面（越具體、越誇張越好）：</p>
                   <Textarea
                     value={current.hookNote ?? ""}
                     onChange={(e) => updateWork({ hookNote: e.target.value })}
-                    placeholder={`例：${scene.spots[0]}上貼著一張寫著「${current.item.term}」的紙條，每次經過都會看到…`}
+                    placeholder={`例：${current.spot || scene.spots[0] || scene.name}上貼著一張寫著「${current.item.term}」的紙條，每次經過都會看到…`}
                     className="bg-white/80 border-amber-300 min-h-20"
                   />
                   <div className="flex justify-end mt-4">

@@ -17,6 +17,7 @@ export interface SubjectPack {
   emoji: string;
   desc: string;
   items: KnowledgeItem[];
+  custom?: boolean; // 使用者自建卡包
 }
 
 export const SUBJECT_PACKS: SubjectPack[] = [
@@ -75,6 +76,49 @@ export const CAMPUS_SCENES: CampusScene[] = [
   { id: "field", name: "操場", emoji: "🏃", spots: ["百米起跑線", "籃球框", "司令台", "單槓", "跑道終點線"] },
   { id: "classroom", name: "教室", emoji: "🏫", spots: ["黑板溝的粉筆灰", "老師的講桌", "最後一排座位", "掃地用具櫃", "窗邊的風扇"] },
 ];
+
+/** localStorage 自訂卡包 */
+const CUSTOM_PACKS_KEY = "memodesk-custom-packs";
+
+export function loadCustomPacks(): SubjectPack[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PACKS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+export function saveCustomPacks(packs: SubjectPack[]) {
+  try { localStorage.setItem(CUSTOM_PACKS_KEY, JSON.stringify(packs)); } catch { /* ignore */ }
+}
+
+export function addCustomPack(pack: SubjectPack) {
+  const packs = loadCustomPacks();
+  packs.unshift(pack);
+  saveCustomPacks(packs);
+}
+
+export function deleteCustomPack(id: string) {
+  saveCustomPacks(loadCustomPacks().filter((p) => p.id !== id));
+}
+
+/**
+ * 解析使用者貼上的知識點文字：
+ * 每行一個知識點，「詞彙 意思」以第一個空白/Tab/｜/｜分隔；
+ * 支援「詞彙：意思」「詞彙,意思」等常見格式。
+ */
+export function parsePastedItems(text: string): KnowledgeItem[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines.slice(0, 20).map((line, i) => {
+    const m = line.split(/[\t|，,：:—-]+| {2,}| /).map((s) => s.trim()).filter(Boolean);
+    const term = m[0] ?? line;
+    const hint = m.slice(1).join(" ") || "（自己補上意思會更好記）";
+    return { id: `u${Date.now()}-${i}`, term, hint };
+  });
+}
 
 export interface Emotion {
   id: string;
