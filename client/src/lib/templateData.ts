@@ -106,6 +106,114 @@ export const MNEMONIC_STYLES: MnemonicStyle[] = [
   },
 ];
 
+type MnemonicReferenceByStyle = Record<MnemonicStyle["id"], string>;
+
+/** 內建卡包的逐題參考答案；自訂卡包會改用下方的通用靈感模板。 */
+const MNEMONIC_REFERENCES: Record<string, MnemonicReferenceByStyle> = {
+  e1: {
+    homophone: "procrastinate → 不若趕快死耐拖：越拖越不想做",
+    rhyme: "Procrastinate 一直拖，今天不做明天多",
+    meme: "沒人：…… 我：先滑五分鐘。procrastinate：計畫通。",
+    "story-chain": "P-R-O：怕任務、繞開它、偶爾才動手——這就是拖延",
+  },
+  e2: {
+    homophone: "ambiguous → 俺比你更『模糊』：意思模稜兩可",
+    rhyme: "Ambiguous 說不明，一句話有兩種情",
+    meme: "老師：答案是 A 還是 B？ ambiguous：Yes。",
+    "story-chain": "A-M-B：A 面、B 面，中間還很模糊",
+  },
+  e3: {
+    homophone: "nostalgia → 老家思家：想起過去就鼻酸",
+    rhyme: "Nostalgia 翻舊照，往日時光忘不掉",
+    meme: "看到童年零食的我：nostalgia.exe 已啟動。",
+    "story-chain": "N-O-S：念舊、Old days、思念湧上來",
+  },
+  e4: {
+    homophone: "resilient → 仍是力人：跌倒還能站起來",
+    rhyme: "Resilient 不怕摔，彈回原位再重來",
+    meme: "生活：把我擊倒。 resilient 的我：復活時間 0 秒。",
+    "story-chain": "R-E-S：Recover、重新站穩、繼續走",
+  },
+  e5: {
+    homophone: "meticulous → 每題扣螺絲：細節一個都不放過",
+    rhyme: "Meticulous 看得細，一絲不苟抓到底",
+    meme: "大家：差不多就好。 meticulous：那個逗號歪了 0.1 mm。",
+    "story-chain": "M-E-T：每個、Element、通通仔細檢查",
+  },
+  h1: {
+    homophone: "1789 → 一起扒酒：法國人攻進巴士底",
+    rhyme: "一七八九法國吼，巴士底獄被攻破",
+    meme: "法國人民：沒有麵包？那就直接革命。",
+    "story-chain": "自平博：自由、平等、博愛，推翻舊王朝",
+  },
+  h2: {
+    homophone: "1969 → 依舊溜久：阿波羅一路溜到月球",
+    rhyme: "一九六九上月球，阿姆斯壯第一步走",
+    meme: "人類：地球逛膩了。阿波羅 11：那去月球吧。",
+    "story-chain": "阿登月：阿波羅、登陸、月球第一步",
+  },
+  h3: {
+    homophone: "1517 → 要我一起：馬丁路德邀大家一起改革",
+    rhyme: "一五一七論綱貼，贖罪券制被挑戰",
+    meme: "教會：買券就安心。馬丁路德：我有 95 個問題。",
+    "story-chain": "馬九贖：馬丁路德、九十五條、反對贖罪券",
+  },
+  h4: {
+    homophone: "1929 → 依舊餓久：大恐慌讓大家窮很久",
+    rhyme: "一九二九股市落，黑色星期全球縮",
+    meme: "華爾街：只是跌一下。全球經濟：我先躺十年。",
+    "story-chain": "華崩蕭：華爾街、崩盤、全球蕭條",
+  },
+  h5: {
+    homophone: "1453 → 要死我傷：君士坦丁堡陷落令人傷",
+    rhyme: "一四五三城門破，東羅馬亡鄂圖坐",
+    meme: "東羅馬：我還能撐。鄂圖曼：城門已讀不回。",
+    "story-chain": "君東鄂：君堡陷落、東羅馬亡、鄂圖曼興",
+  },
+  c1: {
+    homophone: "Na 鈉 → 哪！一碰水就炸，火焰還變黃",
+    rhyme: "鈉碰水，脾氣大；黃色火焰啪啦啪",
+    meme: "沒人：…… 鈉：碰到水直接爆氣 🔥",
+    "story-chain": "水黃鹽：遇水反應、黃焰、藏在食鹽",
+  },
+  c2: {
+    homophone: "He 氦 → 嘿！它很淡定，是不太反應的惰性氣體",
+    rhyme: "氦氣輕，性情靜，吸一口來聲音高",
+    meme: "其他元素：來反應啊！氦：不了，我是惰性氣體。",
+    "story-chain": "輕惰高：最輕、惰性、吸入聲音高",
+  },
+  c3: {
+    homophone: "Fe 鐵 → 飛鐵也會鏽，血紅素裡不能少",
+    rhyme: "鐵會鏽、血帶紅，人體缺它可不行",
+    meme: "鐵：我很堅強。氧氣：那你怎麼又生鏽了？",
+    "story-chain": "鏽血必：會生鏽、在血紅素、人體必需",
+  },
+  c4: {
+    homophone: "Cl 氯 → 洗唷！氯拿來消毒，卻有刺激氣味",
+    rhyme: "氯氣黃綠味刺鼻，游泳池裡負責洗",
+    meme: "細菌：游泳囉！氯：今天泳池由我消毒。",
+    "story-chain": "黃刺消：黃綠色、刺激性、可以消毒",
+  },
+  c5: {
+    homophone: "Au 金 → 喔！金不怕腐蝕，還能拉得超長",
+    rhyme: "黃金延展不怕蝕，一克拉成兩公里",
+    meme: "其他金屬：我生鏽了。金：抱歉，我抗腐蝕。",
+    "story-chain": "延抗長：延展性、抗腐蝕、能拉長絲",
+  },
+};
+
+export function getMnemonicReferences(item: KnowledgeItem, style: MnemonicStyle): string[] {
+  const tailored = MNEMONIC_REFERENCES[item.id]?.[style.id];
+  const generic: MnemonicReferenceByStyle = {
+    homophone: `${item.term} → 把讀音拆成中文近音，再接上「${item.hint}」的畫面`,
+    rhyme: `${item.term} 記心頭，${item.hint} 不會漏`,
+    meme: `沒人：…… ${item.term}：我就是「${item.hint}」本人。`,
+    "story-chain": `${item.term} → 抓出關鍵字頭，串成一幕和「${item.hint}」有關的荒謬故事`,
+  };
+
+  return tailored ? [tailored, generic[style.id]] : [generic[style.id]];
+}
+
 /* ---------------- 劇本殺：劇本設定 ---------------- */
 
 export interface RoleplayScript {

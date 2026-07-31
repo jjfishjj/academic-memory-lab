@@ -7,9 +7,9 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, RefreshCw, WandSparkles } from "lucide-react";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
-import { MNEMONIC_STYLES, addTemplateStats, type MnemonicStyle } from "@/lib/templateData";
+import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
@@ -44,6 +44,7 @@ export default function TrainMnemonic() {
   const [revealed, setRevealed] = useState(false);
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [ideaIndex, setIdeaIndex] = useState(0);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
@@ -59,6 +60,7 @@ export default function TrainMnemonic() {
   };
 
   const nextCreate = () => {
+    setIdeaIndex(0);
     if (idx < works.length - 1) setIdx(idx + 1);
     else { setIdx(0); setRevealed(false); setPhase("quiz"); }
   };
@@ -84,6 +86,8 @@ export default function TrainMnemonic() {
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
+  const references = current?.style ? getMnemonicReferences(current.item, current.style) : [];
+  const currentReference = references[ideaIndex % Math.max(references.length, 1)];
 
   return (
     <TrainShell title="諧音口訣創作家" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
@@ -113,7 +117,7 @@ export default function TrainMnemonic() {
             <p className="text-sm font-bold text-amber-900 mb-2">先挑一種創作風格：</p>
             <div className="grid sm:grid-cols-2 gap-2 mb-4">
               {MNEMONIC_STYLES.map((st) => (
-                <button key={st.id} onClick={() => updateWork({ style: st })}
+                <button key={st.id} onClick={() => { updateWork({ style: st }); setIdeaIndex(0); }}
                   className={`p-3 rounded-lg text-left border-2 transition-all active:scale-[0.98] ${current.style?.id === st.id ? "bg-amber-500/15 border-amber-600" : "bg-white/70 border-amber-300 hover:border-amber-500"}`}>
                   <p className="font-bold text-sm text-amber-900">{st.emoji} {st.name}</p>
                   <p className="text-xs text-amber-800">{st.tip}</p>
@@ -121,7 +125,29 @@ export default function TrainMnemonic() {
               ))}
             </div>
             {current.style && (
-              <p className="font-hand text-xl text-amber-700 mb-2">範例：{current.style.example}</p>
+              <div className="mb-4 rounded-xl border-2 border-dashed border-amber-500 bg-white/55 p-4" aria-live="polite">
+                <div className="flex items-start gap-3">
+                  <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-700">參考答案 · 可以直接用，也可以改成你的版本</p>
+                    <p className="mt-1 font-hand text-xl text-amber-900">{currentReference}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline"
+                        onClick={() => updateWork({ mnemonic: currentReference })}
+                        className="rounded-full border-amber-500 bg-white/70 font-bold text-amber-800 hover:bg-amber-100">
+                        <WandSparkles className="h-3.5 w-3.5" /> 套用這句
+                      </Button>
+                      {references.length > 1 && (
+                        <Button type="button" size="sm" variant="ghost"
+                          onClick={() => setIdeaIndex((i) => (i + 1) % references.length)}
+                          className="rounded-full font-bold text-amber-800 hover:bg-amber-100">
+                          <RefreshCw className="h-3.5 w-3.5" /> 換一個靈感
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             <p className="text-sm font-bold text-amber-900 mb-2">寫下你的口訣（唸出來測試一下順不順口）：</p>
@@ -242,4 +268,3 @@ export default function TrainMnemonic() {
     </TrainShell>
   );
 }
-
