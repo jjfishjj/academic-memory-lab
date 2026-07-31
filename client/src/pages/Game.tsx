@@ -17,9 +17,9 @@ import {
 } from "@/lib/gameData";
 import CustomPackBuilder from "@/components/CustomPackBuilder";
 
-const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
-const STAMP = "/manus-storage/stamp-success_0e7612b4.png";
-const CAMPUS = "/manus-storage/scene-campus_32525752.png";
+const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
+const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
+const CAMPUS = `${import.meta.env.BASE_URL}assets/scene-campus_32525752.png`;
 
 type Phase = "pack" | "hook" | "story" | "recall" | "result";
 

@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Router as WouterRouter, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -12,17 +12,21 @@ import TrainGesture from "./pages/TrainGesture";
 
 
 function Router() {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/game"} component={Game} />
-      <Route path={"/train/mnemonic"} component={TrainMnemonic} />
-      <Route path={"/train/roleplay"} component={TrainRoleplay} />
-      <Route path={"/train/gesture"} component={TrainGesture} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <WouterRouter base={base || undefined}>
+      <Switch>
+        <Route path={"/"} component={Home} />
+        <Route path={"/game"} component={Game} />
+        <Route path={"/train/mnemonic"} component={TrainMnemonic} />
+        <Route path={"/train/roleplay"} component={TrainRoleplay} />
+        <Route path={"/train/gesture"} component={TrainGesture} />
+        <Route path={"/404"} component={NotFound} />
+        {/* Final fallback route */}
+        <Route component={NotFound} />
+      </Switch>
+    </WouterRouter>
   );
 }
 

@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, MapPin, Heart, EyeOff, Stamp, Clock, Sparkles } from "lucide-react";
 import { loadStats, type GymStats } from "@/lib/gameData";
 
-const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
-const HERO = "/manus-storage/hero-desk_6de4c64c.png";
-const CAMPUS = "/manus-storage/scene-campus_32525752.png";
-const EMOTION = "/manus-storage/story-emotion_cd8d15ee.png";
+const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
+const HERO = `${import.meta.env.BASE_URL}assets/hero-desk_6de4c64c.png`;
+const CAMPUS = `${import.meta.env.BASE_URL}assets/scene-campus_32525752.png`;
+const EMOTION = `${import.meta.env.BASE_URL}assets/story-emotion_cd8d15ee.png`;
 
 function Navbar() {
   return (

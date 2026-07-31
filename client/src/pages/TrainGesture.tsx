@@ -13,7 +13,7 @@ import { GESTURE_IDEAS, addTemplateStats, takeItems, type GestureIdea } from "@/
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
-const STAMP = "/manus-storage/stamp-success_0e7612b4.png";
+const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
 type Phase = "pack" | "anchor" | "quiz" | "result";
 
