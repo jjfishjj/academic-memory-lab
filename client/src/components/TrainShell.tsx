@@ -6,7 +6,7 @@ import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
-const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
+const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
 
 interface Step { id: string; label: string }
 
