@@ -5,47 +5,52 @@ const STYLE_RULES = {
   "story-chain": "從字頭或關鍵字依序串成荒謬但可回想的小故事",
 };
 
-function corsHeaders(origin, allowedOrigin) {
-  const allow = origin === allowedOrigin || origin?.startsWith("http://localhost:") || origin?.startsWith("http://127.0.0.1:");
+function corsHeaders(origin) {
+  const allowedOrigins = new Set([
+    "https://jjfishjj.github.io",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ]);
   return {
-    "Access-Control-Allow-Origin": allow ? origin : allowedOrigin,
+    "Access-Control-Allow-Origin": allowedOrigins.has(origin) ? origin : "https://jjfishjj.github.io",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
 }
 
-export default {
-  async fetch(request, env) {
-    const origin = request.headers.get("Origin") || "";
-    const allowedOrigin = env.ALLOWED_ORIGIN || "https://jjfishjj.github.io";
-    const headers = corsHeaders(origin, allowedOrigin);
+function json(payload, status, headers) {
+  return Response.json(payload, { status, headers });
+}
 
+export default {
+  async fetch(request) {
+    const headers = corsHeaders(request.headers.get("Origin") || "");
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
-    if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers });
-    if (!env.OPENAI_API_KEY) return Response.json({ error: "AI service is not configured" }, { status: 503, headers });
+    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, headers);
+    if (!process.env.OPENAI_API_KEY) return json({ error: "AI service is not configured" }, 503, headers);
 
     let input;
     try {
       input = await request.json();
     } catch {
-      return Response.json({ error: "Invalid JSON" }, { status: 400, headers });
+      return json({ error: "Invalid JSON" }, 400, headers);
     }
 
     const { term, hint, extra = "", style, styleName } = input;
     if (![term, hint, style, styleName].every((value) => typeof value === "string" && value.trim())) {
-      return Response.json({ error: "Missing mnemonic input" }, { status: 400, headers });
+      return json({ error: "Missing mnemonic input" }, 400, headers);
     }
 
     const prompt = `知識點：${term}\n意思：${hint}\n補充：${extra || "無"}\n模式：${styleName}\n規則：${STYLE_RULES[style] || "產生好記的中文口訣"}`;
     const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: env.OPENAI_MODEL || "gpt-5.6-terra",
+        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         reasoning: { effort: "none" },
         instructions: "你是繁體中文記憶教練。產生三個短、準確、無冒犯性且彼此不同的記憶口訣。不要解釋，只回傳指定 JSON。",
         input: prompt,
@@ -75,7 +80,7 @@ export default {
 
     const result = await openaiResponse.json();
     if (!openaiResponse.ok) {
-      return Response.json({ error: result?.error?.message || "OpenAI request failed" }, { status: 502, headers });
+      return json({ error: result?.error?.message || "OpenAI request failed" }, 502, headers);
     }
 
     const outputText = result.output
@@ -83,9 +88,9 @@ export default {
       .find((content) => content.type === "output_text")?.text;
     try {
       const parsed = JSON.parse(outputText);
-      return Response.json({ suggestions: parsed.suggestions }, { headers: { ...headers, "Cache-Control": "no-store" } });
+      return json({ suggestions: parsed.suggestions }, 200, { ...headers, "Cache-Control": "no-store" });
     } catch {
-      return Response.json({ error: "AI returned invalid output" }, { status: 502, headers });
+      return json({ error: "AI returned invalid output" }, 502, headers);
     }
   },
 };
