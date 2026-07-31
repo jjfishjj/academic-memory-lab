@@ -6,6 +6,9 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Game from "./pages/Game";
+import TrainMnemonic from "./pages/TrainMnemonic";
+import TrainRoleplay from "./pages/TrainRoleplay";
+import TrainGesture from "./pages/TrainGesture";
 
 
 function Router() {
@@ -13,6 +16,9 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/game"} component={Game} />
+      <Route path={"/train/mnemonic"} component={TrainMnemonic} />
+      <Route path={"/train/roleplay"} component={TrainRoleplay} />
+      <Route path={"/train/gesture"} component={TrainGesture} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

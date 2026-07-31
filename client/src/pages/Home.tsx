@@ -193,7 +193,7 @@ export default function Home() {
             {[
               { n: "01", icon: "🎒", title: "選學科包", desc: "挑官方練習包，或把你自己的單字表、筆記貼進來做成專屬卡包。", tilt: "tilt-l" },
               { n: "02", icon: "📍", title: "掛進場景", desc: "選一個校園角落，或自己寫一個熟悉的地方，把知識點「掛」上去。", tilt: "tilt-r" },
-              { n: "03", icon: "�propos", title: "綁上情緒", desc: "為知識點選一種情緒，用模板編一句迷你故事，讓杏仁核幫你蓋「重要」章。", tilt: "tilt-l2" },
+              { n: "03", icon: "💗", title: "綁上情緒", desc: "為知識點選一種情緒，用模板編一句迷你故事，讓杏仁核幫你蓋「重要」章。", tilt: "tilt-l2" },
               { n: "04", icon: "🙈", title: "遮住回想", desc: "關掉所有提示，只靠場景與情緒線索回想。答對蓋章、連擊加分。", tilt: "tilt-r" },
             ].map((s, i) => (
               <div key={s.n} className={`paper-card ${s.tilt} p-6 relative`}>
@@ -214,6 +214,69 @@ export default function Home() {
                 進入任務 <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 訓練模板 */}
+      <section id="templates" className="py-16">
+        <div className="container">
+          <p className="font-hand text-2xl text-primary mb-2">more training recipes ✂️</p>
+          <h2 className="font-display font-extrabold text-3xl mb-3">社團新訓練模板 · 換個方式記</h2>
+          <p className="text-muted-foreground max-w-2xl mb-12">
+            同一包知識點，可以用嘴巴記、用戲記、用身體記。三個模板都支援自訂知識點——單字、年份、事件、流程通通能練。
+          </p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                emoji: "🎤", name: "諧音迷因與口訣創作家", path: "/train/mnemonic", tilt: "tilt-l2",
+                desc: "把年份、單字、流程變成順口溜、冷笑話或迷因",
+                time: "6 分鐘 · 創作一組口訣 + 立即提取測驗",
+                stats: [
+                  { t: "音韻迴路 +2", c: "bg-[#FDE68A] text-amber-900" },
+                  { t: "跨域連結 +2", c: "bg-[#FBCFE8] text-pink-900" },
+                  { t: "主動回想 +1", c: "bg-teal-100 text-teal-900" },
+                ],
+              },
+              {
+                emoji: "🎭", name: "情境式 AI 劇本殺", path: "/train/roleplay", tilt: "tilt-r",
+                desc: "把單字、歷史或概念包裝成角色扮演任務",
+                time: "9 分鐘 · 完成 1 段角色扮演 + 5 個核心詞觸發劇情",
+                stats: [
+                  { t: "情境編碼 +3", c: "bg-[#FDE68A] text-amber-900" },
+                  { t: "即時輸出 +2", c: "bg-orange-100 text-orange-900" },
+                  { t: "故事綁定 +1", c: "bg-[#FBCFE8] text-pink-900" },
+                ],
+              },
+              {
+                emoji: "🤸", name: "微動作記憶法指南", path: "/train/gesture", tilt: "tilt-l",
+                desc: "把抽象概念綁定手勢、姿勢或小道具",
+                time: "5 分鐘 · 建立 5 個身體動作錨點 + 卡住提示",
+                stats: [
+                  { t: "情境編碼 +1", c: "bg-[#FDE68A] text-amber-900" },
+                  { t: "即時輸出 +2", c: "bg-orange-100 text-orange-900" },
+                  { t: "主動回想 +2", c: "bg-teal-100 text-teal-900" },
+                ],
+              },
+            ].map((t, i) => (
+              <Link key={t.path} href={t.path}>
+                <div className={`paper-card ${t.tilt} p-6 relative h-full group cursor-pointer`}>
+                  <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
+                  <div className="text-4xl mb-3">{t.emoji}</div>
+                  <h3 className="font-display font-bold text-xl mb-2 group-hover:text-primary transition-colors">{t.name}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4">{t.desc}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {t.stats.map((s) => (
+                      <span key={s.t} className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.c}`}>{s.t}</span>
+                    ))}
+                  </div>
+                  <p className="font-hand text-lg text-muted-foreground mb-3">{t.time}</p>
+                  <span className="doodle-note text-xl inline-flex items-center gap-1 group-hover:text-primary transition-colors">
+                    開始 <ArrowRight className="w-4 h-4" />
+                  </span>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
