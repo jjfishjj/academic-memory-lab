@@ -9,6 +9,8 @@ import Game from "./pages/Game";
 import TrainMnemonic from "./pages/TrainMnemonic";
 import TrainRoleplay from "./pages/TrainRoleplay";
 import TrainGesture from "./pages/TrainGesture";
+import PeriodicTable from "./pages/PeriodicTable";
+import PeriodicTutorial from "./pages/PeriodicTutorial";
 
 
 function Router() {
@@ -17,7 +19,9 @@ function Router() {
   return (
     <WouterRouter base={base || undefined}>
       <Switch>
-        <Route path={"/"} component={Home} />
+        <Route path={"/"} component={PeriodicTutorial} />
+        <Route path={"/explore"} component={PeriodicTable} />
+        <Route path={"/original"} component={Home} />
         <Route path={"/game"} component={Game} />
         <Route path={"/train/mnemonic"} component={TrainMnemonic} />
         <Route path={"/train/roleplay"} component={TrainRoleplay} />
