@@ -11,6 +11,7 @@ import TrainRoleplay from "./pages/TrainRoleplay";
 import TrainGesture from "./pages/TrainGesture";
 import PeriodicTable from "./pages/PeriodicTable";
 import PeriodicTutorial from "./pages/PeriodicTutorial";
+import AlkaliRoute from "./pages/AlkaliRoute";
 
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Switch>
         <Route path={"/"} component={PeriodicTutorial} />
         <Route path={"/explore"} component={PeriodicTable} />
+        <Route path={"/alkali"} component={AlkaliRoute} />
         <Route path={"/original"} component={Home} />
         <Route path={"/game"} component={Game} />
         <Route path={"/train/mnemonic"} component={TrainMnemonic} />
