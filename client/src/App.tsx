@@ -12,7 +12,7 @@ import TrainGesture from "./pages/TrainGesture";
 import PeriodicTable from "./pages/PeriodicTable";
 import PeriodicTutorial from "./pages/PeriodicTutorial";
 import AlkaliRoute from "./pages/AlkaliRoute";
-import PhoneticMagic from "./pages/PhoneticMagic";
+import ShadowEchoLab from "./pages/ShadowEchoLab";
 
 
 function Router() {
@@ -21,7 +21,8 @@ function Router() {
   return (
     <WouterRouter base={base || undefined}>
       <Switch>
-        <Route path={"/"} component={PhoneticMagic} />
+        <Route path={"/"} component={ShadowEchoLab} />
+        <Route path={"/shadow-echo"} component={ShadowEchoLab} />
         <Route path={"/explore"} component={PeriodicTable} />
         <Route path={"/alkali"} component={AlkaliRoute} />
         <Route path={"/original"} component={Home} />
