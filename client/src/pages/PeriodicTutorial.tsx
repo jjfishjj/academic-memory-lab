@@ -20,6 +20,13 @@ export default function PeriodicTutorial() {
   const [quiz, setQuiz] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
   const progress = complete ? 100 : step * 25;
+  const passed = (step === 1 && quiz === "11") || (step === 2 && quiz === "K") || (step === 3 && quiz === "Na") || (step === 4 && quiz === "Na");
+  const predictions = [
+    { title: "建立空間座標", why: "你已讀懂元素卡，下一步最有效的是把 Na 放回週期表，連接它的上下左右鄰居。", next: "預計會學：Li 在上、K 在下、Mg 在右，以及同族為何特性相似。", strengthen: "再練一次元素卡資訊" },
+    { title: "把位置翻成諧音故事", why: "你已能用位置找回 K，現在要替位置加上聲音，避免只記得格子卻忘了符號。", next: "預計會學：Li＝力、Na＝拿、K＝卡，並把同族串成一段有動作的故事。", strengthen: "再做一題空間定位" },
+    { title: "關掉提示，主動回想", why: "你已建立位置與諧音兩條線索。下一階段會拿掉故事提示，測試能否自己找回答案。", next: "預計會做：看到原子序 11，在沒有選字提示前先回想 Na。", strengthen: "再讀一次諧音故事" },
+    { title: "進入第一條完整家族路線", why: "你已通過讀卡、空間、諧音與回想，具備獨立學習一整族元素的能力。", next: "建議從第 1 族開始：Li → Na → K → Rb → Cs → Fr。", strengthen: "重新挑戰本章測驗" },
+  ];
 
   const next = () => {
     if (step === 1 && quiz !== "11") return;
@@ -62,7 +69,8 @@ export default function PeriodicTutorial() {
 
           {step === 4 && <div className="recall-lesson"><div className="recall-card"><span className="paper-tape"/><div className="blur-element">?<small>11</small></div><p>原子序 11 的元素符號是？</p><div className="recall-options">{["Na","Ne","Ni","N"].map(x=><button onClick={()=>setQuiz(x)} className={quiz===x?(x==="Na"?"correct":"wrong"):""}>{x}</button>)}</div>{quiz&&<div className="recall-answer">{quiz==="Na"?<><Check/>答對了！你成功從記憶中找回 Na。</>:<>快想想：「拿起鹽罐」是哪個符號？</>}</div>}</div><aside className="recall-why"><BrainIcon/><h3>為什麼要先回想？</h3><p>直接重看答案會產生「我好像會了」的錯覺。努力回想的那幾秒，才會讓記憶路徑真正變強。</p><div><b>看答案</b><span>熟悉感</span><i>→</i><b>先回想</b><span>長期記憶</span></div></aside></div>}
 
-          <div className="lesson-footer"><button disabled={step===1} onClick={()=>{setStep(step-1);setQuiz(null)}}><ArrowLeft/> 上一步</button><span>{step} / 4</span><button className="next-lesson" disabled={(step===1&&quiz!=="11")||(step===2&&quiz!=="K")||(step===3&&quiz!=="Na")||(step===4&&quiz!=="Na")} onClick={next}>{step===4?"完成教學":"下一步"}<ArrowRight/></button></div>
+          {passed && <div className="next-prediction"><header><span><Sparkles size={14}/> MEMGENIUS NEXT</span><b>已根據這階段的成果，預測你的最佳下一步</b></header><div className="prediction-body"><div className="prediction-main"><small>推薦下一階段</small><h3>{predictions[step-1].title}</h3><p>{predictions[step-1].why}</p><div><ArrowRight size={15}/><span>{predictions[step-1].next}</span></div></div><aside><small>你可以選擇</small><button className="recommended-choice" onClick={next}><span><b>A</b><em>建議</em></span><div><strong>{step===4?"完成並開始新章節":"照建議繼續"}</strong><small>使用目前最佳學習路徑</small></div><ArrowRight size={16}/></button><button onClick={()=>setQuiz(null)}><span><b>B</b></span><div><strong>{predictions[step-1].strengthen}</strong><small>留在這一步加強熟練度</small></div></button><button onClick={()=>window.location.href=`${import.meta.env.BASE_URL}explore`}><span><b>C</b></span><div><strong>先看完整元素地圖</strong><small>自由探索，再回來繼續</small></div></button></aside></div><footer><Lightbulb size={14}/><span>這只是學習建議，你可以隨時選擇不同路線；課程會保留目前進度。</span></footer></div>}
+          <div className="lesson-footer"><button disabled={step===1} onClick={()=>{setStep(step-1);setQuiz(null)}}><ArrowLeft/> 上一步</button><span>{step} / 4</span>{!passed && <button className="next-lesson" disabled onClick={next}>{step===4?"完成教學":"完成測驗後繼續"}<ArrowRight/></button>}</div>
           {step===1 && <div className="mini-check"><div><span>小測驗</span><h3>鈉的原子序是多少？</h3></div><div>{["10","11","12"].map(x=><button key={x} onClick={()=>setQuiz(x)} className={quiz===x?(x==="11"?"correct":"wrong"):""}>{x}</button>)}</div>{quiz&&<p>{quiz==="11"?"答對了！可以進入下一步。":"再看看卡片左上角的數字。"}</p>}</div>}
         </> : <div className="complete-screen"><div className="confetti">✦　·　✦　·　✦</div><div className="trophy-circle"><Trophy/></div><small>CHAPTER 01 完成</small><h1>你已經會「正確地記」元素了！</h1><p>你學會讀元素卡、找家族、編故事與主動回想。<br/>接下來，就用這套方法攻下第 1 族吧。</p><div className="complete-stats"><div><b>+120</b><span>學習經驗</span></div><div><b>4 / 4</b><span>完成課程</span></div><div><b>100%</b><span>測驗正確</span></div></div><button className="start-chapter"><Sparkles/> 開始「鹼金屬故事線」<ArrowRight/></button><button className="restart" onClick={()=>{setComplete(false);setStep(1);setQuiz(null)}}><RotateCcw/>重新觀看教學</button></div>}
       </section>
