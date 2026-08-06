@@ -37,6 +37,48 @@ const STEPS = [
   { id: "result", label: "蓋章結算" },
 ];
 
+const REFERENCE_TONES = [
+  {
+    id: "simple", label: "簡單", emoji: "🌱", tip: "一句就懂",
+    panel: "border-emerald-400 bg-emerald-50/85 dark:border-emerald-500/70 dark:bg-emerald-950/90",
+    accent: "text-emerald-700 dark:text-emerald-300", text: "text-emerald-950 dark:text-emerald-50",
+    apply: "border-emerald-500 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500 dark:bg-emerald-950/70 dark:text-emerald-200 dark:hover:bg-emerald-900",
+    active: "border-emerald-700 bg-emerald-600 text-white shadow-sm dark:border-emerald-300 dark:bg-emerald-700",
+    inactive: "border-emerald-300 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200 dark:hover:bg-emerald-900",
+    decorations: ["🌱", "✦", "✓"], decoration: "text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    id: "absurd", label: "荒謬", emoji: "🤯", tip: "畫面最有梗",
+    panel: "border-rose-400 bg-rose-50/85 dark:border-rose-500/70 dark:bg-rose-950/90",
+    accent: "text-rose-700 dark:text-rose-300", text: "text-rose-950 dark:text-rose-50",
+    apply: "border-rose-500 text-rose-800 hover:bg-rose-100 dark:border-rose-500 dark:bg-rose-950/70 dark:text-rose-200 dark:hover:bg-rose-900",
+    active: "border-rose-700 bg-rose-600 text-white shadow-sm dark:border-rose-300 dark:bg-rose-700",
+    inactive: "border-rose-300 bg-rose-50/80 text-rose-800 hover:bg-rose-100 dark:border-rose-700 dark:bg-rose-950/70 dark:text-rose-200 dark:hover:bg-rose-900",
+    decorations: ["💥", "😂", "!?"], decoration: "text-rose-700 dark:text-rose-300",
+  },
+  {
+    id: "exam", label: "考試型", emoji: "🎯", tip: "緊扣得分點",
+    panel: "border-teal-500 bg-teal-50/85 dark:border-teal-400/70 dark:bg-teal-950/90",
+    accent: "text-teal-700 dark:text-teal-300", text: "text-teal-950 dark:text-teal-50",
+    apply: "border-teal-500 text-teal-800 hover:bg-teal-100 dark:border-teal-400 dark:bg-teal-950/70 dark:text-teal-200 dark:hover:bg-teal-900",
+    active: "border-teal-800 bg-teal-700 text-white shadow-sm dark:border-teal-200 dark:bg-teal-700",
+    inactive: "border-teal-300 bg-teal-50/80 text-teal-800 hover:bg-teal-100 dark:border-teal-700 dark:bg-teal-950/70 dark:text-teal-200 dark:hover:bg-teal-900",
+    decorations: ["🎯", "✎", "✓"], decoration: "text-teal-800 dark:text-teal-300",
+  },
+] as const;
+
+const REFERENCE_TONE_KEY = "memodesk-mnemonic-reference-tone";
+
+function loadReferenceToneIndex() {
+  try {
+    const savedTone = localStorage.getItem(REFERENCE_TONE_KEY);
+    const savedIndex = REFERENCE_TONES.findIndex((tone) => tone.id === savedTone);
+    return savedIndex >= 0 ? savedIndex : 0;
+  } catch {
+    return 0;
+  }
+}
+
 const stepColor = (id: string) =>
   id === "create" ? "bg-[#FDE68A] text-amber-900" :
   id === "quiz" ? "bg-[#FBCFE8] text-pink-900" :
@@ -50,7 +92,7 @@ export default function TrainMnemonic() {
   const [revealed, setRevealed] = useState(false);
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
-  const [ideaIndex, setIdeaIndex] = useState(0);
+  const [ideaIndex, setIdeaIndex] = useState(loadReferenceToneIndex);
   const [aiSuggestions, setAiSuggestions] = useState<Record<string, string[]>>({});
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -68,7 +110,6 @@ export default function TrainMnemonic() {
   };
 
   const nextCreate = () => {
-    setIdeaIndex(0);
     if (idx < works.length - 1) setIdx(idx + 1);
     else { setIdx(0); setRevealed(false); setPhase("quiz"); }
   };
@@ -98,6 +139,16 @@ export default function TrainMnemonic() {
   const offlineReferences = current?.style ? getMnemonicReferences(current.item, current.style) : [];
   const references = aiSuggestions[suggestionKey] ?? offlineReferences;
   const currentReference = references[ideaIndex % Math.max(references.length, 1)];
+  const currentTone = REFERENCE_TONES[ideaIndex] ?? REFERENCE_TONES[0];
+
+  const selectReferenceTone = (referenceIndex: number) => {
+    setIdeaIndex(referenceIndex);
+    try {
+      localStorage.setItem(REFERENCE_TONE_KEY, REFERENCE_TONES[referenceIndex]?.id ?? REFERENCE_TONES[0].id);
+    } catch {
+      // localStorage unavailable: keep the choice for this session only.
+    }
+  };
 
   const requestAiSuggestions = async () => {
     if (!current?.style) return;
@@ -105,7 +156,6 @@ export default function TrainMnemonic() {
     try {
       const suggestions = await generateAiMnemonicReferences(current.item, current.style);
       setAiSuggestions((all) => ({ ...all, [suggestionKey]: suggestions }));
-      setIdeaIndex(0);
       toast.success("AI 已產生 3 個新靈感");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "AI 生成失敗，已保留離線答案");
@@ -182,7 +232,7 @@ export default function TrainMnemonic() {
             <p className="text-sm font-bold text-amber-900 mb-2">先挑一種創作風格：</p>
             <div className="grid sm:grid-cols-2 gap-2 mb-4">
               {MNEMONIC_STYLES.map((st) => (
-                <button key={st.id} onClick={() => { updateWork({ style: st }); setIdeaIndex(0); }}
+                <button key={st.id} onClick={() => updateWork({ style: st })}
                   className={`p-3 rounded-lg text-left border-2 transition-all active:scale-[0.98] ${current.style?.id === st.id ? "bg-amber-500/15 border-amber-600" : "bg-white/70 border-amber-300 hover:border-amber-500"}`}>
                   <p className="font-bold text-sm text-amber-900">{st.emoji} {st.name}</p>
                   <p className="text-xs text-amber-800">{st.tip}</p>
@@ -190,37 +240,52 @@ export default function TrainMnemonic() {
               ))}
             </div>
             {current.style && (
-              <div className="mb-4 rounded-xl border-2 border-dashed border-amber-500 bg-white/55 p-4" aria-live="polite">
-                <div className="flex items-start gap-3">
-                  <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div data-tone={currentTone.id}
+                className={`relative mb-4 overflow-hidden rounded-xl border-2 border-dashed p-4 transition-colors duration-300 ${currentTone.panel}`}
+                aria-live="polite">
+                <div data-testid="reference-tone-decorations" aria-hidden="true"
+                  className={`pointer-events-none absolute inset-0 select-none opacity-[0.14] transition-colors duration-300 ${currentTone.decoration}`}>
+                  <span className="absolute -right-2 top-1 rotate-12 text-4xl">{currentTone.decorations[0]}</span>
+                  <span className="absolute bottom-1 left-9 -rotate-12 text-2xl font-black">{currentTone.decorations[1]}</span>
+                  <span className="absolute bottom-7 right-24 rotate-6 text-xl font-black">{currentTone.decorations[2]}</span>
+                </div>
+                <div className="relative z-10 flex items-start gap-3">
+                  <Lightbulb className={`mt-0.5 h-5 w-5 shrink-0 transition-colors ${currentTone.accent}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
-                        {aiSuggestions[suggestionKey] ? "AI 參考答案" : "離線參考答案"} · {ideaIndex + 1} / {references.length}
+                      <p className={`text-xs font-bold uppercase tracking-wider transition-colors ${currentTone.accent}`}>
+                        {aiSuggestions[suggestionKey] ? "AI 參考答案" : "離線參考答案"} · {REFERENCE_TONES[ideaIndex]?.label ?? "簡單"}
                       </p>
                       <Button type="button" size="sm" variant="ghost" disabled={!mnemonicAiAvailable || aiLoading}
                         onClick={requestAiSuggestions}
                         title={mnemonicAiAvailable ? "請 AI 重新產生三個答案" : "部署 AI 端點後即可使用"}
-                        className="h-8 rounded-full font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60">
+                        className={`h-8 rounded-full font-bold disabled:opacity-60 ${currentTone.accent}`}>
                         {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         {mnemonicAiAvailable ? "AI 生成 3 個" : "AI 待連線"}
                       </Button>
                     </div>
-                    <p className="mt-2 font-hand text-xl text-amber-900 break-words">{currentReference}</p>
+                    <p key={`${suggestionKey}:${ideaIndex}:${aiSuggestions[suggestionKey] ? "ai" : "offline"}`}
+                      className={`reference-note-swap mt-2 break-words font-hand text-xl ${currentTone.text}`}>
+                      {currentReference}
+                    </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button type="button" size="sm" variant="outline"
                         onClick={() => updateWork({ mnemonic: currentReference, rating: undefined, bookmarked: false })}
-                        className="w-full rounded-full border-amber-500 bg-white/70 font-bold text-amber-800 hover:bg-amber-100 sm:w-auto">
+                        className={`w-full rounded-full bg-white/75 font-bold sm:w-auto ${currentTone.apply}`}>
                         <WandSparkles className="h-3.5 w-3.5" /> 套用這句
                       </Button>
-                      <div className="flex justify-center gap-1 sm:justify-start" aria-label="切換參考答案">
-                        {references.map((_, referenceIndex) => (
-                          <button key={referenceIndex} type="button" onClick={() => setIdeaIndex(referenceIndex)}
-                            aria-label={`查看第 ${referenceIndex + 1} 個答案`}
-                            className={`h-8 min-w-8 rounded-full border-2 text-sm font-bold transition-colors ${referenceIndex === ideaIndex ? "border-amber-700 bg-amber-600 text-white" : "border-amber-400 bg-white/70 text-amber-800"}`}>
-                            {referenceIndex + 1}
+                      <div className="grid w-full grid-cols-3 gap-1.5 sm:w-auto" aria-label="切換參考答案風格">
+                        {references.map((_, referenceIndex) => {
+                          const tone = REFERENCE_TONES[referenceIndex] ?? REFERENCE_TONES[0];
+                          return (
+                          <button key={referenceIndex} type="button" onClick={() => selectReferenceTone(referenceIndex)}
+                            aria-label={`切換成${tone.label}參考答案：${tone.tip}`}
+                            title={tone.tip}
+                            className={`min-h-10 rounded-xl border-2 px-2 py-1 text-xs font-bold transition-all active:scale-95 sm:min-w-24 ${referenceIndex === ideaIndex ? tone.active : tone.inactive}`}>
+                            <span aria-hidden="true">{tone.emoji}</span> {tone.label}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
