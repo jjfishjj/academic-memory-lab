@@ -206,7 +206,7 @@ function vitePluginStorageProxy(): Plugin {
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
 export default defineConfig({
-  base: process.env.GITHUB_PAGES ? "/academic-memory-lab/" : "/",
+  base: process.env.VITE_BASE_PATH || (process.env.GITHUB_PAGES ? "/academic-memory-lab/" : "/"),
   plugins,
   resolve: {
     alias: {
