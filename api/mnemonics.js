@@ -42,7 +42,7 @@ export default {
       return json({ error: "Missing mnemonic input" }, 400, headers);
     }
 
-    const prompt = `知識點：${term}\n意思：${hint}\n補充：${extra || "無"}\n模式：${styleName}\n規則：${STYLE_RULES[style] || "產生好記的中文口訣"}`;
+    const prompt = `知識點：${term}\n意思：${hint}\n補充：${extra || "無"}\n模式：${styleName}\n規則：${STYLE_RULES[style] || "產生好記的中文口訣"}\n請依序產生：1. 簡單型（一句就懂）2. 荒謬型（誇張有梗、畫面鮮明）3. 考試型（包含關鍵得分點）。`;
     const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -52,7 +52,7 @@ export default {
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         reasoning: { effort: "none" },
-        instructions: "你是繁體中文記憶教練。產生三個短、準確、無冒犯性且彼此不同的記憶口訣。不要解釋，只回傳指定 JSON。",
+        instructions: "你是熟悉台灣用語的繁體中文記憶教練。依使用者指定順序產生簡單型、荒謬型、考試型三個短、準確、適合學生且無冒犯性的記憶口訣。不要解釋，只回傳指定 JSON。",
         input: prompt,
         text: {
           format: {
