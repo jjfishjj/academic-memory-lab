@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Award, BarChart3, BookOpenCheck, Brain, CalendarClock, Check, Cloud, Headphones, Map, Route, RotateCcw, Sparkles, TrainFront, X } from "lucide-react";
+import { ArrowRight, Award, BarChart3, BookOpenCheck, Brain, CalendarClock, Check, Cloud, Eye, Headphones, Map, Route, RotateCcw, Sparkles, TrainFront, Volume2, X } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import TrainShell from "@/components/TrainShell";
 import { MRT_LINES, neighborsFor, transferCodesFor, validateMrtData, type MrtLine, type MrtStation } from "@/lib/mrtData";
 import { dueCountFor, learnedCountFor, loadMrtProgress, prioritizeStations, recordMrtAnswer, reviewLabel, saveMrtRun, type MrtProgress } from "@/lib/mrtProgress";
+import { getMrtMnemonic } from "@/lib/mrtMnemonics";
 
 const STEPS = [
   { id: "line", label: "選路線" },
@@ -130,6 +131,7 @@ export default function TrainMrt() {
   const accuracy = attempts ? Math.round((correct / attempts) * 100) : 0;
   const transferCodes = current ? transferCodesFor(current.station) : [];
   const currentReview = current ? progress.stations[current.station.code] : undefined;
+  const mnemonic = current ? getMrtMnemonic(current.station) : undefined;
   const totalDue = MRT_LINES.reduce((sum, item) => sum + dueCountFor(item.stations.filter((station) => !station.preview), progress), 0);
 
   return (
@@ -253,6 +255,17 @@ export default function TrainMrt() {
                   <CalendarClock className="w-4 h-4 inline mr-1" />
                   {selected === current.answer ? reviewLabel(currentReview) : "已加入錯題，下一輪優先出現"}
                 </p>
+                {mnemonic && (
+                  <div className="mt-5 rounded-2xl border border-purple-200 bg-purple-50/70 p-4 text-left">
+                    <p className="font-display font-black text-purple-900 flex items-center gap-2"><Sparkles className="w-4 h-4" />諧音聯想記憶卡</p>
+                    <p className="mt-2 font-bold text-purple-950">{mnemonic.sound}</p>
+                    <div className="grid sm:grid-cols-2 gap-2 mt-3 text-sm text-purple-950">
+                      <p className="rounded-xl bg-white/80 p-3"><Eye className="w-4 h-4 inline mr-1 text-purple-700" />{mnemonic.scene}</p>
+                      <p className="rounded-xl bg-white/80 p-3"><Volume2 className="w-4 h-4 inline mr-1 text-purple-700" />{mnemonic.action}</p>
+                    </div>
+                    <p className="text-xs font-bold text-purple-800 mt-3">站碼鉤子：{mnemonic.codeHook}</p>
+                  </div>
+                )}
                 <Button onClick={next} className="mt-5 rounded-full font-bold w-full sm:w-auto">
                   {stage === "order" && questionIndex === questions.length - 1 ? "查看成績" : "下一題"} <ArrowRight className="w-4 h-4" />
                 </Button>
