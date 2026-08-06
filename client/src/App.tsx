@@ -22,6 +22,7 @@ const CloudSyncPage = lazy(() => import("./pages/CloudSyncPage"));
 const MrtMnemonicLibrary = lazy(() => import("./pages/MrtMnemonicLibrary"));
 const ElementGame = lazy(() => import("./pages/ElementGame"));
 const MemGeniusArcade = lazy(() => import("./pages/MemGeniusArcade"));
+const ShadowEcho = lazy(() => import("./pages/ShadowEcho"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function Router() {
@@ -57,6 +58,7 @@ function Router() {
           <Route path={"/train/mrt/mnemonics"} component={MrtMnemonicLibrary} />
           <Route path={"/train/elements"} component={ElementGame} />
           <Route path={"/memgenius"} component={MemGeniusArcade} />
+          <Route path={"/shadow-echo"} component={ShadowEcho} />
           <Route path={"/404"} component={NotFound} />
           {/* Final fallback route */}
           <Route component={NotFound} />
