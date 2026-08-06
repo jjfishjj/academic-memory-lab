@@ -12,7 +12,57 @@ export interface PersonalMrtMnemonic {
   favorite: boolean;
 }
 
+export type MrtMnemonicStyle = "humor" | "story" | "celebrity";
+export type MrtStylePreferences = Record<MrtMnemonicStyle, number>;
+
 const PERSONAL_KEY = "memodesk-mrt-personal-mnemonics";
+export const MRT_PERSONAL_MNEMONICS_KEY = PERSONAL_KEY;
+export const MRT_STYLE_PREFERENCES_KEY = "memodesk-mrt-style-preferences";
+
+const EMPTY_STYLE_PREFERENCES: MrtStylePreferences = {
+  humor: 0,
+  story: 0,
+  celebrity: 0,
+};
+
+export function loadMrtStylePreferences(): MrtStylePreferences {
+  try {
+    const raw = localStorage.getItem(MRT_STYLE_PREFERENCES_KEY);
+    return { ...EMPTY_STYLE_PREFERENCES, ...(raw ? JSON.parse(raw) : {}) };
+  } catch {
+    return { ...EMPTY_STYLE_PREFERENCES };
+  }
+}
+
+export function mnemonicStyleOf(text: string): MrtMnemonicStyle | null {
+  if (text.startsWith("幽默型")) return "humor";
+  if (text.startsWith("故事型")) return "story";
+  if (text.startsWith("名人型")) return "celebrity";
+  return null;
+}
+
+export function recordMrtStyleChoice(text: string): MrtStylePreferences {
+  const style = mnemonicStyleOf(text);
+  const next = loadMrtStylePreferences();
+  if (style) next[style] += 1;
+  localStorage.setItem(MRT_STYLE_PREFERENCES_KEY, JSON.stringify(next));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
+  return next;
+}
+
+export function sortMrtSuggestionsByPreference(
+  suggestions: string[],
+  preferences = loadMrtStylePreferences()
+): string[] {
+  return suggestions
+    .map((text, index) => ({
+      text,
+      index,
+      score: preferences[mnemonicStyleOf(text) ?? "humor"] ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(item => item.text);
+}
 
 export function loadPersonalMrtMnemonics(): Record<
   string,
@@ -33,6 +83,28 @@ export function savePersonalMrtMnemonic(
 ): Record<string, PersonalMrtMnemonic> {
   const next = { ...loadPersonalMrtMnemonics(), [code]: value };
   localStorage.setItem(PERSONAL_KEY, JSON.stringify(next));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
+  return next;
+}
+
+export function deletePersonalMrtMnemonic(
+  code: string
+): Record<string, PersonalMrtMnemonic> {
+  const next = { ...loadPersonalMrtMnemonics() };
+  delete next[code];
+  localStorage.setItem(PERSONAL_KEY, JSON.stringify(next));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
+  return next;
+}
+
+export function updatePersonalMrtMnemonics(
+  updater: (
+    current: Record<string, PersonalMrtMnemonic>
+  ) => Record<string, PersonalMrtMnemonic>
+): Record<string, PersonalMrtMnemonic> {
+  const next = updater(loadPersonalMrtMnemonics());
+  localStorage.setItem(PERSONAL_KEY, JSON.stringify(next));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
   return next;
 }
 
@@ -290,6 +362,15 @@ export function getMrtSegmentMovie(
     return `${station.code} ${station.name}的「${lead}」跳上車`;
   });
   return `${scenes.join("，接著")}。最後全車一起大喊「${stations.map(station => station.name).join("、")}」衝到終點！`;
+}
+
+export function offlineMrtCandidates(station: MrtStation): string[] {
+  const base = getMrtMnemonic(station).sound;
+  return [
+    `幽默型：${base}搶著擠進 ${station.code} 車門，跌成一團還大喊「${station.name}到了！」`,
+    `故事型：主角拿著${base}，沿月台找到 ${station.code} 門牌，終於抵達${station.name}。`,
+    `名人型：想像你最熟悉的名人抱著${base}，在 ${station.code} 宣布下一站是${station.name}。`,
+  ];
 }
 
 export function speakMrtMnemonic(

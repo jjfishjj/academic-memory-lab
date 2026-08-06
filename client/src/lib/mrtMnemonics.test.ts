@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MRT_STATIONS } from "./mrtData";
-import { getMrtMnemonic, getMrtSegmentMovie } from "./mrtMnemonics";
+import {
+  getMrtMnemonic,
+  getMrtSegmentMovie,
+  mnemonicStyleOf,
+  offlineMrtCandidates,
+  sortMrtSuggestionsByPreference,
+} from "./mrtMnemonics";
 
 describe("MRT mnemonic engine", () => {
   it("creates sound, scene, action and code hooks for every station", () => {
@@ -32,5 +38,27 @@ describe("MRT mnemonic engine", () => {
     const movie = getMrtSegmentMovie(stations, personal);
     stations.forEach(station => expect(movie).toContain(station.name));
     expect(movie).toContain("我的動物園口訣");
+  });
+
+  it("provides humorous, story and celebrity candidates offline", () => {
+    const station = ALL_MRT_STATIONS[0];
+    const suggestions = offlineMrtCandidates(station);
+    expect(suggestions).toHaveLength(3);
+    expect(suggestions[0]).toContain("幽默型");
+    expect(suggestions[1]).toContain("故事型");
+    expect(suggestions[2]).toContain("名人型");
+    suggestions.forEach(item => expect(item).toContain(station.code));
+  });
+
+  it("ranks the preferred candidate style first", () => {
+    const suggestions = ["幽默型：笑話", "故事型：冒險", "名人型：明星"];
+    expect(mnemonicStyleOf(suggestions[2])).toBe("celebrity");
+    expect(
+      sortMrtSuggestionsByPreference(suggestions, {
+        humor: 1,
+        story: 2,
+        celebrity: 5,
+      })[0]
+    ).toBe(suggestions[2]);
   });
 });

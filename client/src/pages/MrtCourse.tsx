@@ -212,6 +212,16 @@ export default function MrtCourse() {
     setEditingSound(getMrtMnemonic(station, personalMnemonics).sound);
   };
 
+  const flipStation = (station: MrtStation) => {
+    setFlipped(current => new Set(current).add(station.code));
+    if (
+      profile?.vark === "auditory" ||
+      profile?.primaryTalent === "soundMimic"
+    ) {
+      speakMrtMnemonic(station, getMrtMnemonic(station, personalMnemonics));
+    }
+  };
+
   const saveMnemonic = (
     station: MrtStation,
     favorite = personalMnemonics[station.code]?.favorite ?? false
@@ -643,6 +653,31 @@ export default function MrtCourse() {
             stations={stationsForSegment(segment)}
             revealed={false}
           />
+          {profile && (
+            <div className="rounded-xl bg-primary/10 text-primary px-4 py-3 mt-5 text-sm font-bold">
+              {profile.vark === "visual"
+                ? "🖼️ 視覺模式：先看完整電影，再逐站翻牌。"
+                : profile.vark === "auditory"
+                  ? "🎧 聽覺模式：翻牌會自動播放三拍口訣。"
+                  : profile.vark === "kinesthetic"
+                    ? "🎬 動覺模式：每翻一站，請做一次開車門手勢。"
+                    : "📚 讀寫模式：讀完站碼、站名與聯想再前進。"}
+            </div>
+          )}
+          {profile?.vark === "visual" && (
+            <div className="paper-card p-5 mt-5 border-fuchsia-300 bg-fuchsia-50/70">
+              <p className="font-display font-black text-fuchsia-900 flex items-center gap-2">
+                <Film className="w-5 h-5" />
+                視覺預告片
+              </p>
+              <p className="mt-2 leading-7">
+                {getMrtSegmentMovie(
+                  stationsForSegment(segment),
+                  personalMnemonics
+                )}
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-7">
             {stationsForSegment(segment).map(station => {
               const isFlipped = flipped.has(station.code);
@@ -651,11 +686,7 @@ export default function MrtCourse() {
                 <div key={station.code} className="min-w-0">
                   <button
                     onClick={() =>
-                      isFlipped
-                        ? editMnemonic(station)
-                        : setFlipped(current =>
-                            new Set(current).add(station.code)
-                          )
+                      isFlipped ? editMnemonic(station) : flipStation(station)
                     }
                     className={`station-flip-card w-full ${isFlipped ? "station-flipped" : ""}`}
                     aria-label={`翻開 ${station.code}`}
@@ -677,6 +708,9 @@ export default function MrtCourse() {
                       >
                         <strong>{station.name}</strong>
                         <small>{mnemonic.sound}</small>
+                        {profile?.vark === "kinesthetic" && (
+                          <small>✋ 比出車門打開，再指向下一站</small>
+                        )}
                       </span>
                     </span>
                   </button>
@@ -765,40 +799,41 @@ export default function MrtCourse() {
                 </div>
               );
             })()}
-          {flipped.size === segment.stationCodes.length && (
-            <div className="paper-card unlock-in p-6 mt-6 border-fuchsia-300 bg-fuchsia-50/70">
-              <p className="font-display font-black text-fuchsia-900 flex items-center gap-2">
-                <Film className="w-5 h-5" />
-                本段荒謬小電影
-              </p>
-              <p className="mt-3 leading-7">
-                {getMrtSegmentMovie(
-                  stationsForSegment(segment),
-                  personalMnemonics
-                )}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const movie = getMrtSegmentMovie(
+          {flipped.size === segment.stationCodes.length &&
+            profile?.vark !== "visual" && (
+              <div className="paper-card unlock-in p-6 mt-6 border-fuchsia-300 bg-fuchsia-50/70">
+                <p className="font-display font-black text-fuchsia-900 flex items-center gap-2">
+                  <Film className="w-5 h-5" />
+                  本段荒謬小電影
+                </p>
+                <p className="mt-3 leading-7">
+                  {getMrtSegmentMovie(
                     stationsForSegment(segment),
                     personalMnemonics
-                  );
-                  if ("speechSynthesis" in window) {
-                    window.speechSynthesis.cancel();
-                    const utterance = new SpeechSynthesisUtterance(movie);
-                    utterance.lang = "zh-TW";
-                    utterance.rate = 0.82;
-                    window.speechSynthesis.speak(utterance);
-                  }
-                }}
-                className="rounded-full mt-4"
-              >
-                <Volume2 className="w-4 h-4" />
-                播放整段電影
-              </Button>
-            </div>
-          )}
+                  )}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const movie = getMrtSegmentMovie(
+                      stationsForSegment(segment),
+                      personalMnemonics
+                    );
+                    if ("speechSynthesis" in window) {
+                      window.speechSynthesis.cancel();
+                      const utterance = new SpeechSynthesisUtterance(movie);
+                      utterance.lang = "zh-TW";
+                      utterance.rate = 0.82;
+                      window.speechSynthesis.speak(utterance);
+                    }
+                  }}
+                  className="rounded-full mt-4"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  播放整段電影
+                </Button>
+              </div>
+            )}
           <Button
             disabled={flipped.size < segment.stationCodes.length}
             onClick={() => startQuiz("forward")}
