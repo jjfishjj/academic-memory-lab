@@ -10,10 +10,17 @@ export interface MrtMnemonic {
 export interface PersonalMrtMnemonic {
   sound: string;
   favorite: boolean;
+  quality?: MrtMnemonicQuality;
 }
 
 export type MrtMnemonicStyle = "humor" | "story" | "celebrity";
+export type MrtMnemonicQuality = "good" | "okay" | "hard";
 export type MrtStylePreferences = Record<MrtMnemonicStyle, number>;
+
+export interface MrtMnemonicImport {
+  mnemonics: Record<string, PersonalMrtMnemonic>;
+  preferences?: Partial<MrtStylePreferences>;
+}
 
 const PERSONAL_KEY = "memodesk-mrt-personal-mnemonics";
 export const MRT_PERSONAL_MNEMONICS_KEY = PERSONAL_KEY;
@@ -62,6 +69,58 @@ export function sortMrtSuggestionsByPreference(
     }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map(item => item.text);
+}
+
+export function qualityAdjustedPreferences(
+  mnemonics: Record<string, PersonalMrtMnemonic>,
+  preferences = loadMrtStylePreferences()
+): MrtStylePreferences {
+  const next = { ...preferences };
+  Object.values(mnemonics).forEach(item => {
+    const style = mnemonicStyleOf(item.sound);
+    if (!style || !item.quality) return;
+    next[style] +=
+      item.quality === "good" ? 3 : item.quality === "okay" ? 1 : -2;
+  });
+  return next;
+}
+
+export function parseMrtMnemonicImport(value: unknown): MrtMnemonicImport {
+  if (!value || typeof value !== "object")
+    throw new Error("匯入檔不是有效物件");
+  const payload = value as { mnemonics?: unknown; preferences?: unknown };
+  if (!payload.mnemonics || typeof payload.mnemonics !== "object")
+    throw new Error("匯入檔缺少 mnemonics");
+  const allowedQuality = new Set(["good", "okay", "hard"]);
+  const mnemonics: Record<string, PersonalMrtMnemonic> = {};
+  Object.entries(payload.mnemonics as Record<string, unknown>).forEach(
+    ([code, raw]) => {
+      if (!raw || typeof raw !== "object")
+        throw new Error(`${code} 的聯想格式錯誤`);
+      const item = raw as {
+        sound?: unknown;
+        favorite?: unknown;
+        quality?: unknown;
+      };
+      if (typeof item.sound !== "string" || !item.sound.trim())
+        throw new Error(`${code} 缺少聯想文字`);
+      if (
+        item.quality !== undefined &&
+        !allowedQuality.has(String(item.quality))
+      )
+        throw new Error(`${code} 的品質值無效`);
+      mnemonics[code] = {
+        sound: item.sound.trim(),
+        favorite: Boolean(item.favorite),
+        quality: item.quality as MrtMnemonicQuality | undefined,
+      };
+    }
+  );
+  const preferences =
+    payload.preferences && typeof payload.preferences === "object"
+      ? (payload.preferences as Partial<MrtStylePreferences>)
+      : undefined;
+  return { mnemonics, preferences };
 }
 
 export function loadPersonalMrtMnemonics(): Record<

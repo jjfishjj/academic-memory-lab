@@ -6,14 +6,31 @@ import { collectLocalSnapshot, restoreLocalSnapshot } from "./supabase";
 
 class MemoryStorage {
   private values = new Map<string, string>();
-  getItem(key: string) { return this.values.get(key) ?? null; }
-  setItem(key: string, value: string) { this.values.set(key, value); }
-  removeItem(key: string) { this.values.delete(key); }
-  clear() { this.values.clear(); }
-  key(index: number) { return [...this.values.keys()][index] ?? null; }
-  get length() { return this.values.size; }
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+  clear() {
+    this.values.clear();
+  }
+  key(index: number) {
+    return [...this.values.keys()][index] ?? null;
+  }
+  get length() {
+    return this.values.size;
+  }
 }
-beforeEach(() => Object.defineProperty(globalThis, "localStorage", { value: new MemoryStorage(), configurable: true }));
+beforeEach(() =>
+  Object.defineProperty(globalThis, "localStorage", {
+    value: new MemoryStorage(),
+    configurable: true,
+  })
+);
 
 describe("integrated learning features", () => {
   it("scores all 12 quiz answers and returns two different talents", () => {
@@ -30,15 +47,48 @@ describe("integrated learning features", () => {
   });
 
   it("unlocks the all-lines badge only when six exams pass", () => {
-    const progress: MrtProgress = { lines: {}, stations: {}, segments: {}, branches: {}, lineExams: {} };
-    expect(earnedBadges(progress, { dates: [], streak: 0, bestStreak: 0 }).find((badge) => badge.id === "all")?.earned).toBe(false);
-    ["BR", "R", "G", "O", "BL", "Y"].forEach((id) => { progress.lineExams[id as keyof typeof progress.lineExams] = { bestAccuracy: 100, passed: true }; });
-    expect(earnedBadges(progress, { dates: [], streak: 0, bestStreak: 0 }).find((badge) => badge.id === "all")?.earned).toBe(true);
+    const progress: MrtProgress = {
+      lines: {},
+      stations: {},
+      segments: {},
+      branches: {},
+      lineExams: {},
+    };
+    expect(
+      earnedBadges(progress, { dates: [], streak: 0, bestStreak: 0 }).find(
+        badge => badge.id === "all"
+      )?.earned
+    ).toBe(false);
+    ["BR", "R", "G", "O", "BL", "Y"].forEach(id => {
+      progress.lineExams[id as keyof typeof progress.lineExams] = {
+        bestAccuracy: 100,
+        passed: true,
+      };
+    });
+    expect(
+      earnedBadges(progress, { dates: [], streak: 0, bestStreak: 0 }).find(
+        badge => badge.id === "all"
+      )?.earned
+    ).toBe(true);
   });
 
   it("round-trips the local learning snapshot", () => {
-    localStorage.setItem("memodesk-memory-profile-v1", JSON.stringify({ vark: "visual" }));
-    const snapshot = collectLocalSnapshot(); localStorage.clear(); restoreLocalSnapshot(snapshot);
-    expect(JSON.parse(localStorage.getItem("memodesk-memory-profile-v1")!)).toEqual({ vark: "visual" });
+    localStorage.setItem(
+      "memodesk-memory-profile-v1",
+      JSON.stringify({ vark: "visual" })
+    );
+    localStorage.setItem(
+      "memodesk-mrt-style-preferences",
+      JSON.stringify({ humor: 2, story: 1, celebrity: 0 })
+    );
+    const snapshot = collectLocalSnapshot();
+    localStorage.clear();
+    restoreLocalSnapshot(snapshot);
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-memory-profile-v1")!)
+    ).toEqual({ vark: "visual" });
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-mrt-style-preferences")!)
+    ).toEqual({ humor: 2, story: 1, celebrity: 0 });
   });
 });

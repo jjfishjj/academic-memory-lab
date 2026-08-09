@@ -5,6 +5,8 @@ import {
   getMrtSegmentMovie,
   mnemonicStyleOf,
   offlineMrtCandidates,
+  parseMrtMnemonicImport,
+  qualityAdjustedPreferences,
   sortMrtSuggestionsByPreference,
 } from "./mrtMnemonics";
 
@@ -60,5 +62,27 @@ describe("MRT mnemonic engine", () => {
         celebrity: 5,
       })[0]
     ).toBe(suggestions[2]);
+  });
+
+  it("imports exported mnemonics and uses quality to adjust ranking", () => {
+    const parsed = parseMrtMnemonicImport({
+      mnemonics: {
+        BR01: { sound: "故事型：動物園冒險", favorite: true, quality: "good" },
+      },
+      preferences: { story: 2 },
+    });
+    expect(parsed.mnemonics.BR01.quality).toBe("good");
+    expect(
+      qualityAdjustedPreferences(parsed.mnemonics, {
+        humor: 1,
+        story: 2,
+        celebrity: 0,
+      }).story
+    ).toBe(5);
+    expect(() =>
+      parseMrtMnemonicImport({
+        mnemonics: { BR01: { sound: "", quality: "bad" } },
+      })
+    ).toThrow();
   });
 });

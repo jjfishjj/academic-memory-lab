@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  BarChart3,
   Bot,
   CheckSquare,
   Download,
@@ -8,6 +9,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  Upload,
   Volume2,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -17,6 +19,9 @@ import { generateMrtMnemonicCandidates } from "@/lib/mnemonicAi";
 import {
   deletePersonalMrtMnemonic,
   getMrtMnemonic,
+  mnemonicStyleOf,
+  parseMrtMnemonicImport,
+  qualityAdjustedPreferences,
   loadMrtStylePreferences,
   loadPersonalMrtMnemonics,
   savePersonalMrtMnemonic,
@@ -24,6 +29,7 @@ import {
   recordMrtStyleChoice,
   sortMrtSuggestionsByPreference,
   updatePersonalMrtMnemonics,
+  type MrtMnemonicQuality,
   type PersonalMrtMnemonic,
 } from "@/lib/mrtMnemonics";
 
@@ -43,6 +49,51 @@ export default function MrtMnemonicLibrary() {
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [preferences, setPreferences] = useState(() =>
     loadMrtStylePreferences()
+  );
+  const [message, setMessage] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const adjustedPreferences = useMemo(
+    () => qualityAdjustedPreferences(items, preferences),
+    [items, preferences]
+  );
+  const styleStats = useMemo(
+    () =>
+      [
+        {
+          id: "humor" as const,
+          label: "幽默型",
+          count: adjustedPreferences.humor,
+        },
+        {
+          id: "story" as const,
+          label: "故事型",
+          count: adjustedPreferences.story,
+        },
+        {
+          id: "celebrity" as const,
+          label: "名人型",
+          count: adjustedPreferences.celebrity,
+        },
+      ].sort((a, b) => b.count - a.count),
+    [adjustedPreferences]
+  );
+  const lineStats = useMemo(
+    () =>
+      Object.entries(items).reduce<
+        Record<string, { total: number; good: number }>
+      >((result, [code, item]) => {
+        const station = ALL_MRT_STATIONS.find(
+          candidate => candidate.code === code
+        );
+        if (!station) return result;
+        const current = result[station.lineId] ?? { total: 0, good: 0 };
+        current.total += 1;
+        if (item.quality === "good") current.good += 1;
+        result[station.lineId] = current;
+        return result;
+      }, {}),
+    [items]
   );
 
   const rows = useMemo(
@@ -88,6 +139,7 @@ export default function MrtMnemonicLibrary() {
       savePersonalMrtMnemonic(code, {
         sound: sound.trim(),
         favorite: items[code]?.favorite ?? false,
+        quality: items[code]?.quality,
       })
     );
     setDraft(sound.trim());
@@ -98,7 +150,7 @@ export default function MrtMnemonicLibrary() {
     setBusy(true);
     const result = await generateMrtMnemonicCandidates(station);
     setSuggestions(
-      sortMrtSuggestionsByPreference(result.suggestions, preferences)
+      sortMrtSuggestionsByPreference(result.suggestions, adjustedPreferences)
     );
     setAiSource(result.source);
     setBusy(false);
@@ -169,6 +221,44 @@ export default function MrtMnemonicLibrary() {
     link.click();
     URL.revokeObjectURL(url);
   };
+  const importJson = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = parseMrtMnemonicImport(JSON.parse(await file.text()));
+      const validCodes = new Set(ALL_MRT_STATIONS.map(station => station.code));
+      const validItems = Object.fromEntries(
+        Object.entries(parsed.mnemonics).filter(([code]) =>
+          validCodes.has(code)
+        )
+      );
+      setItems(
+        updatePersonalMrtMnemonics(current => ({ ...current, ...validItems }))
+      );
+      if (parsed.preferences) {
+        const merged = { ...preferences, ...parsed.preferences };
+        localStorage.setItem(
+          "memodesk-mrt-style-preferences",
+          JSON.stringify(merged)
+        );
+        localStorage.setItem(
+          "memodesk-local-updated-at",
+          new Date().toISOString()
+        );
+        setPreferences(merged);
+      }
+      setMessage(
+        `成功匯入 ${Object.keys(validItems).length} 筆聯想；同站碼資料已更新。`
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? `匯入失敗：${error.message}` : "匯入失敗"
+      );
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+  const setQuality = (code: string, quality: MrtMnemonicQuality) =>
+    setItems(savePersonalMrtMnemonic(code, { ...items[code], quality }));
 
   return (
     <main className="container max-w-5xl py-8">
@@ -194,6 +284,37 @@ export default function MrtMnemonicLibrary() {
           {Object.values(items).filter(item => item.favorite).length} 個收藏
         </span>
       </div>
+      <section className="paper-card p-5 mt-6">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-purple-700" />
+          <h2 className="font-display font-bold text-xl">AI 偏好分析</h2>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 mt-4">
+          {styleStats.map((style, index) => (
+            <div
+              key={style.id}
+              className={`rounded-xl p-4 ${index === 0 ? "bg-purple-100 text-purple-950" : "bg-muted"}`}
+            >
+              <span className="text-sm font-bold">
+                {style.label}
+                {index === 0 && " · 目前首選"}
+              </span>
+              <strong className="block text-3xl mt-1">{style.count}</strong>
+              <span className="text-xs">採用與品質加權分數</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          {Object.entries(lineStats).map(([lineId, value]) => (
+            <span
+              key={lineId}
+              className="rounded-full border px-3 py-1 text-xs font-bold"
+            >
+              {lineId}：{value.total} 筆 · 好記 {value.good}
+            </span>
+          ))}
+        </div>
+      </section>
       <div className="paper-card p-4 mt-7 flex flex-col sm:flex-row gap-3">
         <label className="flex-1 relative">
           <Search className="absolute left-3 top-3.5 w-4 h-4 text-muted-foreground" />
@@ -252,12 +373,35 @@ export default function MrtMnemonicLibrary() {
             <Download className="w-4 h-4" />
             匯出 {selectedCodes.size ? `${selectedCodes.size} 筆` : "全部"} JSON
           </Button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={event => importJson(event.target.files?.[0])}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            onClick={() => importRef.current?.click()}
+            className="rounded-full"
+          >
+            <Upload className="w-4 h-4" />
+            匯入 JSON
+          </Button>
           {selectedCodes.size > 0 && (
             <span className="text-sm font-bold text-primary">
               已選 {selectedCodes.size} 筆
             </span>
           )}
         </div>
+      )}
+      {message && (
+        <p
+          className={`rounded-xl p-3 mt-4 text-sm font-bold ${message.startsWith("匯入失敗") ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+          aria-live="polite"
+        >
+          {message}
+        </p>
       )}
       {rows.length === 0 ? (
         <div className="paper-card p-10 text-center mt-6">
@@ -351,7 +495,10 @@ export default function MrtMnemonicLibrary() {
                                   setSuggestions(current =>
                                     sortMrtSuggestionsByPreference(
                                       current,
-                                      nextPreferences
+                                      qualityAdjustedPreferences(
+                                        items,
+                                        nextPreferences
+                                      )
                                     )
                                   );
                                 }}
@@ -364,7 +511,34 @@ export default function MrtMnemonicLibrary() {
                         )}
                       </>
                     ) : (
-                      <p className="mt-2 leading-7">{saved.sound}</p>
+                      <>
+                        <p className="mt-2 leading-7">{saved.sound}</p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <span className="text-xs font-bold text-muted-foreground py-1">
+                            這個聯想：
+                          </span>
+                          {(
+                            [
+                              ["good", "好記"],
+                              ["okay", "普通"],
+                              ["hard", "難記"],
+                            ] as const
+                          ).map(([quality, label]) => (
+                            <button
+                              key={quality}
+                              onClick={() => setQuality(station.code, quality)}
+                              className={`rounded-full border px-3 py-1 text-xs font-bold ${saved.quality === quality ? (quality === "good" ? "bg-emerald-100 border-emerald-400 text-emerald-800" : quality === "hard" ? "bg-red-100 border-red-400 text-red-800" : "bg-amber-100 border-amber-400 text-amber-800") : "bg-white"}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {mnemonicStyleOf(saved.sound) && (
+                          <p className="text-xs text-purple-700 mt-2">
+                            此評分會調整未來同風格候選順位。
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="flex flex-col gap-1">
