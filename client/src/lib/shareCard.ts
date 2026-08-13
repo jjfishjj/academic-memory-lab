@@ -5,6 +5,8 @@ interface ShareCardItem {
   rating?: number;
 }
 
+export type ShareCardResult = "shared" | "downloaded" | "cancelled";
+
 function wrapLine(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const chars = Array.from(text);
   const lines: string[] = [];
@@ -22,7 +24,16 @@ function wrapLine(context: CanvasRenderingContext2D, text: string, maxWidth: num
   return lines;
 }
 
-export function downloadMnemonicShareCard(items: ShareCardItem[]) {
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob);
+      else reject(new Error("無法建立分享卡圖片"));
+    }, "image/png");
+  });
+}
+
+export async function shareMnemonicCard(items: ShareCardItem[]): Promise<ShareCardResult> {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
@@ -65,8 +76,32 @@ export function downloadMnemonicShareCard(items: ShareCardItem[]) {
   context.font = "24px sans-serif";
   context.fillText("MemoDesk · jjfishjj.github.io/academic-memory-lab", 72, 1310);
 
+  const filename = `memodesk-mnemonics-${new Date().toISOString().slice(0, 10)}.png`;
+  const blob = await canvasToBlob(canvas);
+  const file = new File([blob], filename, { type: "image/png" });
+
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: "記憶手帳社 · 我的口訣卡",
+        text: "把難記的知識，變成唸得出口的記憶。",
+        files: [file],
+      });
+      return "shared";
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+      // 分享面板失敗時仍保留圖片下載，避免使用者成果遺失。
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.download = `memodesk-mnemonics-${new Date().toISOString().slice(0, 10)}.png`;
-  link.href = canvas.toDataURL("image/png");
+  link.download = filename;
+  link.href = objectUrl;
+  link.rel = "noopener";
+  document.body.appendChild(link);
   link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  return "downloaded";
 }

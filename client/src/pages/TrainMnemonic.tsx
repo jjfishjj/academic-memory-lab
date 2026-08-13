@@ -7,13 +7,13 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Download } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
 import { generateAiMnemonicReferences, mnemonicAiAvailable } from "@/lib/mnemonicAi";
 import { removeMnemonicEntry, saveMnemonicEntry } from "@/lib/mnemonicLibrary";
-import { downloadMnemonicShareCard } from "@/lib/shareCard";
+import { shareMnemonicCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
@@ -261,7 +261,7 @@ export default function TrainMnemonic() {
                         title={mnemonicAiAvailable ? "請 AI 重新產生三個答案" : "部署 AI 端點後即可使用"}
                         className={`h-8 rounded-full font-bold disabled:opacity-60 ${currentTone.accent}`}>
                         {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                        {mnemonicAiAvailable ? "AI 生成 3 個" : "AI 待連線"}
+                        {mnemonicAiAvailable ? (aiSuggestions[suggestionKey] ? "換一批 AI" : "AI 生成 3 個") : "離線題庫模式"}
                       </Button>
                     </div>
                     <p key={`${suggestionKey}:${ideaIndex}:${aiSuggestions[suggestionKey] ? "ai" : "offline"}`}
@@ -428,20 +428,21 @@ export default function TrainMnemonic() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
-            <Button onClick={() => {
+            <Button onClick={async () => {
               try {
-                downloadMnemonicShareCard(works.map((w) => ({
+                const result = await shareMnemonicCard(works.map((w) => ({
                   term: w.item.term,
                   hint: w.item.hint,
                   mnemonic: w.mnemonic ?? "",
                   rating: w.rating,
                 })));
-                toast.success("分享卡已下載");
+                if (result === "shared") toast.success("分享卡已送出");
+                if (result === "downloaded") toast.success("分享卡已下載");
               } catch {
-                toast.error("分享卡下載失敗，請稍後再試");
+                toast.error("分享卡建立失敗，請稍後再試");
               }
-            }} size="lg" variant="outline" className="font-display font-bold rounded-full px-8 border-2 active:scale-[0.97] transition-transform">
-              <Download className="w-4 h-4" /> 下載成果分享卡
+            }} size="lg" variant="outline" className="w-full font-display font-bold rounded-full px-8 border-2 active:scale-[0.97] transition-transform sm:w-auto">
+              <Share2 className="w-4 h-4" /> 分享／下載成果卡
             </Button>
             <Button onClick={restart} size="lg" className="font-display font-bold rounded-full px-8 active:scale-[0.97] transition-transform">
               <RotateCcw className="w-4 h-4" /> 再來一輪
