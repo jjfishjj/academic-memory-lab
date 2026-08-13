@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SUBJECT_PACKS } from "./gameData";
-import { SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS, getScienceGeographyReferences } from "./scienceGeographyMnemonicData";
+import { SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS, TAIWAN_ABSURD_SCENES, getScienceGeographyReferences } from "./scienceGeographyMnemonicData";
 import { MNEMONIC_STYLES } from "./templateData";
 
 describe("生物與地理離線題庫", () => {
@@ -37,6 +37,17 @@ describe("生物與地理離線題庫", () => {
       expect(item.anchor.length, `${item.id} 錨點太短`).toBeGreaterThanOrEqual(8);
       expect(item.chain.split("→")).toHaveLength(3);
       expect(new Set([item.sound, item.image, item.anchor, item.chain]).size).toBe(4);
+    }
+  });
+
+  it("40 題都有逐題改寫且不重複的台灣荒謬場景", () => {
+    expect(Object.keys(TAIWAN_ABSURD_SCENES)).toEqual(reviewedItemIds);
+    expect(new Set(Object.values(TAIWAN_ABSURD_SCENES)).size).toBe(40);
+    for (const item of SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS) {
+      expect(TAIWAN_ABSURD_SCENES[item.id].length).toBeGreaterThanOrEqual(25);
+      for (const style of MNEMONIC_STYLES) {
+        expect(getScienceGeographyReferences(item.id, style.id as "homophone" | "rhyme" | "meme" | "story-chain")![1]).toContain(TAIWAN_ABSURD_SCENES[item.id]);
+      }
     }
   });
 });
