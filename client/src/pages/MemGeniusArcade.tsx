@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { Link } from "wouter";
-import { ArrowLeft, BrainCircuit, Check, ChevronRight, RotateCcw, Sparkles, Trophy } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Check, ChevronRight, Cloud, LogIn, LogOut, RotateCcw, Sparkles, Target, Trophy } from "lucide-react";
+import { isSupabaseConfigured, markLocalDataUpdated, supabase, syncLearningData } from "@/lib/supabase";
 
 type GameId = "palace" | "trail" | "bounce" | "grid" | "maze";
 type Game = { id: GameId; icon: string; title: string; source: string; talent: string; description: string; color: string };
@@ -16,15 +18,16 @@ const games: Game[] = [
 type Round = { expected: string[]; choices: string[]; prompt: string; focus?: string; clue?: string; pattern?: string[]; cubeFaces?: string[] };
 type Difficulty = "easy" | "normal" | "hard";
 type TrainingLog = { game: GameId; correct: boolean; responseMs: number; difficulty: Difficulty; round: number; at: string };
+type LeaderboardEntry = { user_id: string; display_name: string; total_xp: number };
 const difficultyConfig: Record<Difficulty, { label: string; seconds: number; sequence: number; distractors: number; xp: number; hint: string }> = {
   easy: { label: "初級", seconds: 8, sequence: 3, distractors: 3, xp: 80, hint: "提示較久・3 步記憶" },
   normal: { label: "中級", seconds: 5, sequence: 4, distractors: 5, xp: 100, hint: "標準時間・4 步記憶" },
   hard: { label: "高級", seconds: 3, sequence: 5, distractors: 7, xp: 140, hint: "快速遮蔽・5 步記憶" },
 };
-const ROUND_COUNT = 12;
+const ROUND_COUNT = 36;
 const faceNames = ["正面", "背面", "右側", "左側", "頂面", "底面"];
 const faceClasses = ["front", "back", "right", "left", "top", "bottom"];
-const palaceItems = ["📚", "☕", "🌱", "🎧", "🧠", "⌛", "🔑", "🎨", "🧪", "🧭", "💡", "🎵"];
+const palaceItems = ["📚", "☕", "🌱", "🎧", "🧠", "⌛", "🔑", "🎨", "🧪", "🧭", "💡", "🎵", "🧸", "📷", "🪴", "🕯️", "🎒", "🧩", "🔭", "🧲", "🪶", "🛎️", "🗺️", "🏺", "🪁", "🎯", "🧵", "📯", "🪄", "🧿", "🪙", "🛶", "🦉", "🍎", "⏰", "✒️"];
 const trailPaths = [["1","5","9","8"],["3","5","7","4"],["1","2","5","9"],["7","5","3","6"],["2","4","5","8"],["9","6","5","1"],["4","1","2","6"],["8","9","5","3"],["1","4","8","9"],["6","3","2","5"],["7","8","5","2"],["3","6","8","7"]];
 const associations = [
   ["光合作用","植物利用陽光，把二氧化碳和水轉換成養分並釋放氧氣。","🌿"], ["蒸發","液態水吸收熱量後變成氣體。","💨"], ["引力","讓物體落向地面，也維持行星軌道。","🌍"], ["導電","讓電子容易通過材料。","⚡"],
@@ -36,6 +39,31 @@ const mazePaths = [["↑","→","→","↓"],["→","↑","←","↑"],["↓","�
 const allCells = ["1","2","3","4","5","6","7","8","9"];
 const allDirections = ["↑","↓","←","→"];
 const allAssociations = associations.map((item) => item[2]);
+const difficultyOrder: Difficulty[] = ["easy", "normal", "hard"];
+const adaptiveTargetMs: Record<Difficulty, number> = { easy: 6500, normal: 4500, hard: 3200 };
+
+function shiftedTrail(index: number) {
+  const seed = trailPaths[index % trailPaths.length];
+  const shift = Math.floor(index / trailPaths.length) * 2;
+  return seed.map(cell => String(((Number(cell) - 1 + shift) % 9) + 1));
+}
+
+function shiftedMaze(index: number) {
+  const seed = mazePaths[index % mazePaths.length];
+  const shift = Math.floor(index / mazePaths.length) % 4;
+  return seed.map(direction => allDirections[(allDirections.indexOf(direction) + shift) % 4]);
+}
+
+function recommendedDifficulty(logs: TrainingLog[], current: Difficulty): Difficulty {
+  const recent = logs.slice(0, 5);
+  if (recent.length < 3) return current;
+  const rate = recent.filter(item => item.correct).length / recent.length;
+  const average = recent.reduce((sum, item) => sum + item.responseMs, 0) / recent.length;
+  const position = difficultyOrder.indexOf(current);
+  if (rate >= .8 && average <= adaptiveTargetMs[current] && position < 2) return difficultyOrder[position + 1];
+  if (rate <= .4 && position > 0) return difficultyOrder[position - 1];
+  return current;
+}
 
 function getRound(gameId: GameId, index: number, difficulty: Difficulty): Round {
   const i = index % ROUND_COUNT;
@@ -49,21 +77,25 @@ function getRound(gameId: GameId, index: number, difficulty: Difficulty): Round 
     return { expected: [faceNames[targetFace]], choices: faceNames, prompt: `記住「${focus}」在哪一面。`, focus, cubeFaces: faces };
   }
   if (gameId === "trail") {
-    const basePath = trailPaths[i];
+    const basePath = shiftedTrail(i);
     const unusedCell = allCells.find((cell) => !basePath.includes(cell)) ?? "5";
     return { expected: [...basePath, unusedCell].slice(0, config.sequence), choices: allCells, prompt: "記住數字亮起的順序。" };
   }
   if (gameId === "bounce") {
-    const [concept, clue, target] = associations[i];
+    const cycle = Math.floor(i / associations.length);
+    const [concept, clue, target] = associations[i % associations.length];
     const pool = allAssociations.filter((item) => item !== target);
     const distractors = Array.from({ length: config.distractors }, (_, offset) => pool[(i + offset) % pool.length]);
-    return { expected: [target], choices: [target, ...distractors].sort(), prompt: concept, clue };
+    const context = ["核心定義", "生活應用", "快速辨識"][cycle];
+    return { expected: [target], choices: [target, ...distractors].sort(), prompt: `${concept}・${context}`, clue };
   }
   if (gameId === "grid") {
-    const unit = gridUnits[i];
-    return { expected: [unit[2]], choices: [...unit, ...gridUnits[(i + 4) % ROUND_COUNT]].slice(0, 6), prompt: "找出循環規律的下一格。", pattern: [...unit, unit[0], unit[1], "?"] };
+    const source = gridUnits[i % gridUnits.length];
+    const offset = Math.floor(i / gridUnits.length) % source.length;
+    const unit = [...source.slice(offset), ...source.slice(0, offset)];
+    return { expected: [unit[2]], choices: [...unit, ...gridUnits[(i + 4) % gridUnits.length]].slice(0, 6), prompt: "找出循環規律的下一格。", pattern: [...unit, unit[0], unit[1], "?"] };
   }
-  return { expected: [...mazePaths[i], allDirections[(i + 1) % allDirections.length]].slice(0, config.sequence), choices: allDirections, prompt: "記住鑰匙移動的方向。" };
+  return { expected: [...shiftedMaze(i), allDirections[(i + 1) % allDirections.length]].slice(0, config.sequence), choices: allDirections, prompt: "記住鑰匙移動的方向。" };
 }
 
 function loadScores(): Record<string, number> {
@@ -84,6 +116,13 @@ export default function MemGeniusArcade() {
   const [cubeTurn, setCubeTurn] = useState(0);
   const [roundIndex, setRoundIndex] = useState(0);
   const [recallStartedAt, setRecallStartedAt] = useState(0);
+  const [adaptive, setAdaptive] = useState(() => localStorage.getItem("memgenius-adaptive") !== "off");
+  const [dailyGoal, setDailyGoal] = useState(() => Number(localStorage.getItem("memgenius-daily-goal") || 5));
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [cloudMessage, setCloudMessage] = useState("");
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const game = games.find((item) => item.id === active);
   const round = active ? getRound(active, roundIndex, difficulty) : getRound("palace", 0, difficulty);
   const expected = round.expected;
@@ -94,6 +133,22 @@ export default function MemGeniusArcade() {
   const todayKey = new Date().toDateString();
   const todayCount = logs.filter((item) => new Date(item.at).toDateString() === todayKey).length;
   const weakestGame = games.map((item) => { const records = logs.filter((log) => log.game === item.id); return { ...item, rate: records.length ? records.filter((log) => log.correct).length / records.length : 1, attempts: records.length }; }).filter((item) => item.attempts).sort((a, b) => a.rate - b.rate)[0];
+  const dailyChallenge = useMemo(() => {
+    const day = Math.floor(new Date().setHours(0, 0, 0, 0) / 86400000);
+    return { game: games[day % games.length], round: day % ROUND_COUNT };
+  }, [todayKey]);
+  const trend = useMemo(() => Array.from({ length: 7 }, (_, offset) => {
+    const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - (6 - offset));
+    const next = new Date(date); next.setDate(next.getDate() + 1);
+    const records = logs.filter(log => { const at = new Date(log.at); return at >= date && at < next; });
+    return { label: `${date.getMonth() + 1}/${date.getDate()}`, count: records.length, accuracy: records.length ? Math.round(records.filter(log => log.correct).length / records.length * 100) : 0 };
+  }), [logs]);
+  const achievements = useMemo(() => [
+    { icon: "🌱", label: "踏出第一步", unlocked: logs.length >= 1 },
+    { icon: "🔥", label: "十局鍛鍊", unlocked: logs.length >= 10 },
+    { icon: "🎯", label: "精準記憶", unlocked: logs.length >= 10 && accuracy >= 80 },
+    { icon: "👑", label: "百局大師", unlocked: logs.length >= 100 },
+  ], [logs.length, accuracy]);
 
   useEffect(() => {
     if (phase !== "memorize") return;
@@ -102,7 +157,31 @@ export default function MemGeniusArcade() {
     return () => window.clearTimeout(timer);
   }, [phase, countdown]);
 
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    supabase.from("memgenius_profiles").select("user_id,display_name,total_xp").order("total_xp", { ascending: false }).limit(5).then(({ data: rows }) => { if (rows) setLeaderboard(rows as LeaderboardEntry[]); });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
   function chooseDifficulty(value: Difficulty) { setDifficulty(value); localStorage.setItem("memgenius-difficulty", value); }
+  function toggleAdaptive() { setAdaptive(value => { localStorage.setItem("memgenius-adaptive", value ? "off" : "on"); return !value; }); }
+  function changeGoal(value: number) { setDailyGoal(value); localStorage.setItem("memgenius-daily-goal", String(value)); markLocalDataUpdated(); }
+  async function sendMagicLink() {
+    if (!supabase || !email) return;
+    setCloudBusy(true); setCloudMessage("");
+    const appBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}${appBase}/memgenius` } });
+    setCloudMessage(error ? error.message : "登入連結已寄出，請到信箱完成登入。"); setCloudBusy(false);
+  }
+  async function syncCloud() {
+    setCloudBusy(true); setCloudMessage("");
+    try { const result = await syncLearningData(); if (supabase && user) await supabase.from("memgenius_profiles").upsert({ user_id: user.id, display_name: user.user_metadata?.display_name || "記憶旅人", total_xp: total, achievements: achievements.filter(item => item.unlocked).length, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); setCloudMessage(result === "downloaded" ? "已下載雲端紀錄，重新整理後生效。" : result === "uploaded" ? "訓練紀錄、成就與排行榜已同步。" : "本機與雲端已是最新狀態。"); }
+    catch (error) { setCloudMessage(error instanceof Error ? error.message : "同步失敗"); }
+    setCloudBusy(false);
+  }
+  function startDaily() { setActive(dailyChallenge.game.id); setRoundIndex(dailyChallenge.round); setAnswer([]); setCountdown(difficultyConfig[difficulty].seconds); setPhase("memorize"); }
   function beginRecall() { setRecallStartedAt(Date.now()); setPhase("recall"); }
   function start(id: GameId) { setActive(id); setRoundIndex((current) => { let next = Math.floor(Math.random() * ROUND_COUNT); if (next === current) next = (next + 1) % ROUND_COUNT; return next; }); setAnswer([]); setCountdown(difficultyConfig[difficulty].seconds); setCubeTurn(0); setPhase("memorize"); }
   function pick(value: string) {
@@ -118,7 +197,9 @@ export default function MemGeniusArcade() {
     const next = { ...scores, [active]: Math.max(scores[active] || 0, earned) };
     const entry: TrainingLog = { game: active, correct: isCorrect, responseMs: Math.max(0, Date.now() - recallStartedAt), difficulty, round: roundIndex, at: new Date().toISOString() };
     const nextLogs = [entry, ...logs].slice(0, 200);
-    setScores(next); setLogs(nextLogs); localStorage.setItem("memgenius-arcade-scores", JSON.stringify(next)); localStorage.setItem("memgenius-training-log", JSON.stringify(nextLogs)); setPhase("result");
+    setScores(next); setLogs(nextLogs); localStorage.setItem("memgenius-arcade-scores", JSON.stringify(next)); localStorage.setItem("memgenius-training-log", JSON.stringify(nextLogs)); markLocalDataUpdated();
+    if (adaptive) { const suggested = recommendedDifficulty(nextLogs, difficulty); if (suggested !== difficulty) chooseDifficulty(suggested); }
+    setPhase("result");
   }
   function reset() { setRoundIndex((value) => (value + 1) % ROUND_COUNT); setAnswer([]); setCountdown(difficultyConfig[difficulty].seconds); setCubeTurn(0); setPhase("memorize"); }
 
@@ -133,13 +214,16 @@ export default function MemGeniusArcade() {
       {!active ? (
         <div className="mg-wrap">
           <section className="mg-hero">
-            <div><span className="mg-kicker">把遊戲，變成大腦的健身器材</span><h1>五種玩法，找出你的<br/><em>記憶超能力</em></h1><p>每局只要 30 秒。遊戲會測量空間、序列、聯想、規則與路徑記憶，成績只保存在你的裝置。</p></div>
+            <div><span className="mg-kicker">把遊戲，變成大腦的健身器材</span><h1>五種玩法，找出你的<br/><em>記憶超能力</em></h1><p>每局只要 30 秒。自適應教練會依正確率與速度調整負重，登入後可跨裝置保存進步。</p></div>
             <div className="mg-orbit"><span>🧠</span>{games.map((g, i) => <i key={g.id} style={{ "--i": i } as React.CSSProperties}>{g.icon}</i>)}</div>
           </section>
-          <section className="mg-difficulty" aria-label="選擇訓練難度"><div><small>TRAINING LEVEL</small><h2>選擇今天的大腦負重</h2></div><div className="mg-levels">{(Object.keys(difficultyConfig) as Difficulty[]).map((level) => <button key={level} className={difficulty === level ? "active" : ""} onClick={() => chooseDifficulty(level)}><b>{difficultyConfig[level].label}</b><span>{difficultyConfig[level].hint}</span><em>{difficultyConfig[level].xp} XP</em></button>)}</div></section>
+          <section className="mg-difficulty" aria-label="選擇訓練難度"><div><small>ADAPTIVE TRAINING</small><h2>今天的大腦負重</h2><button className={`mg-adaptive ${adaptive ? "active" : ""}`} onClick={toggleAdaptive}>{adaptive ? "自適應教練已開啟" : "開啟自適應教練"}</button></div><div className="mg-levels">{(Object.keys(difficultyConfig) as Difficulty[]).map((level) => <button key={level} className={difficulty === level ? "active" : ""} onClick={() => chooseDifficulty(level)}><b>{difficultyConfig[level].label}</b><span>{difficultyConfig[level].hint}</span><em>{difficultyConfig[level].xp} XP</em></button>)}</div></section>
+          <section className="mg-daily"><div><small>DAILY CHALLENGE</small><h2>{dailyChallenge.game.icon} 今日挑戰：{dailyChallenge.game.title}</h2><p>所有玩家今天都是第 {dailyChallenge.round + 1} 組題目，完成即可累積每日進度。</p></div><div className="mg-goal"><Target size={22}/><b>{todayCount}/{dailyGoal}</b><span>每日目標</span><select aria-label="設定每日目標" value={dailyGoal} onChange={event => changeGoal(Number(event.target.value))}><option value={3}>3 局</option><option value={5}>5 局</option><option value={10}>10 局</option></select></div><button onClick={startDaily}>開始今日挑戰 <ChevronRight size={17}/></button></section>
           <section className="mg-summary"><div><small>今日完成</small><strong>{todayCount}<span> 局</span></strong></div><div><small>整體正確率</small><strong>{accuracy}<span>%</span></strong></div><div><small>平均反應</small><strong>{averageSeconds}<span> 秒</span></strong></div></section>
-          <section className="mg-grid">{games.map((g, index) => <button key={g.id} className="mg-card" style={{ "--game": g.color } as React.CSSProperties} onClick={() => start(g.id)}><span className="mg-number">0{index + 1}</span><span className="mg-icon">{g.icon}</span><span className="mg-score">{scores[g.id] !== undefined ? `${scores[g.id]} XP` : "NEW"}</span><h2>{g.title}</h2><small>{g.source} · 12 組題庫</small><p>{g.description}</p><span className="mg-play">開始{difficultyConfig[difficulty].label}訓練 <ChevronRight size={17}/></span></button>)}</section>
+          <section className="mg-grid">{games.map((g, index) => <button key={g.id} className="mg-card" style={{ "--game": g.color } as React.CSSProperties} onClick={() => start(g.id)}><span className="mg-number">0{index + 1}</span><span className="mg-icon">{g.icon}</span><span className="mg-score">{scores[g.id] !== undefined ? `${scores[g.id]} XP` : "NEW"}</span><h2>{g.title}</h2><small>{g.source} · 36 組題庫</small><p>{g.description}</p><span className="mg-play">開始{difficultyConfig[difficulty].label}訓練 <ChevronRight size={17}/></span></button>)}</section>
+          <section className="mg-report"><div className="mg-report-head"><div><small>7-DAY REPORT</small><h2>七日訓練趨勢</h2></div><strong>{todayCount >= dailyGoal ? "今日達標 ✓" : `再 ${Math.max(0, dailyGoal - todayCount)} 局達標`}</strong></div><div className="mg-chart">{trend.map(day => <div key={day.label}><span title={`${day.count} 局・${day.accuracy}%`} style={{ height: `${Math.max(6, day.accuracy)}%` }}></span><b>{day.accuracy}%</b><small>{day.label}</small></div>)}</div><div className="mg-weakness"><BrainCircuit size={23}/><div><b>{weakestGame ? `弱項：${weakestGame.title}` : "完成訓練後開始分析"}</b><p>{weakestGame ? `${weakestGame.talent}目前正確率 ${Math.round(weakestGame.rate * 100)}%，建議本週多練 3 局。` : "系統會依五種記憶能力找出最值得加強的項目。"}</p></div></div><div className="mg-badges">{achievements.map(item => <span key={item.label} className={item.unlocked ? "unlocked" : ""}>{item.icon}<b>{item.label}</b></span>)}</div></section>
           <section className="mg-records"><div><small>TRAINING INSIGHT</small><h2>你的訓練紀錄</h2><p>{logs.length ? `已累積 ${logs.length} 次作答。${weakestGame ? `目前最需要加強的是「${weakestGame.title}」，建議下一局從這裡開始。` : ""}` : "完成第一局後，這裡會顯示正確率、反應時間和弱項。"}</p></div><div className="mg-record-list">{logs.slice(0, 5).map((log, index) => { const item = games.find((g) => g.id === log.game); return <div key={`${log.at}-${index}`}><span>{item?.icon}</span><b>{item?.title}</b><small>{difficultyConfig[log.difficulty].label} · {(log.responseMs / 1000).toFixed(1)}s</small><em className={log.correct ? "good" : "miss"}>{log.correct ? "答對" : "待加強"}</em></div>; })}</div></section>
+          <section className="mg-cloud"><div><small>CLOUD PROFILE</small><h2><Cloud size={22}/> 雲端帳號與排行榜</h2><p>{isSupabaseConfigured ? user ? `已登入 ${user.email}，可跨裝置同步訓練紀錄與成就。` : "使用 Email Magic Link 安全登入，密碼不會保存在此裝置。" : "目前為本機模式。設定 Supabase Project URL 與 publishable key 後即可啟用跨裝置同步。"}</p></div>{isSupabaseConfigured ? user ? <div className="mg-cloud-actions"><button disabled={cloudBusy} onClick={syncCloud}><Cloud size={16}/> 立即同步</button><button className="ghost" onClick={() => supabase?.auth.signOut()}><LogOut size={16}/> 登出</button></div> : <div className="mg-login"><input aria-label="Email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com"/><button disabled={cloudBusy || !email} onClick={sendMagicLink}><LogIn size={16}/> 寄送登入連結</button></div> : <span className="mg-local-pill">LOCAL MODE</span>} {cloudMessage && <p className="mg-cloud-message" aria-live="polite">{cloudMessage}</p>}<div className="mg-leaderboard"><b>{leaderboard.length ? "本週排行榜" : "本週排行榜預覽"}</b><ol>{leaderboard.length ? leaderboard.map((entry, index) => <li key={entry.user_id} className={entry.user_id === user?.id ? "self" : ""}><span>{["🥇", "🥈", "🥉"][index] || "⭐"} {entry.display_name}</span><em>{entry.total_xp} XP</em></li>) : <><li><span>🥇 記憶旅人</span><em>{Math.max(total + 420, 1280)} XP</em></li><li><span>🥈 腦力探險家</span><em>{Math.max(total + 180, 980)} XP</em></li><li className="self"><span>⭐ 你{user?.email ? `・${user.email.split("@")[0]}` : "（本機）"}</span><em>{total} XP</em></li></>}</ol><small>排行榜只顯示暱稱與 XP，不公開 Email。</small></div></section>
         </div>
       ) : (
         <div className="mg-stage-wrap">
