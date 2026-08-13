@@ -481,6 +481,7 @@ export interface RoleplayScript {
   role: string;     // 玩家角色
   setting: string;  // 場景設定
   mission: string;  // 任務目標（核心詞如何觸發劇情）
+  scenes: { title: string; setting: string; objective: string; sentenceLead: string }[];
 }
 
 export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
@@ -491,6 +492,13 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     role: "你是被緊急召來的王牌偵探",
     setting: "深夜的校園發生離奇事件，線索散落在五個角落",
     mission: "每個核心詞都是一條關鍵線索——說出它的意義才能解鎖下一條",
+    scenes: [
+      { title: "圖書館的午夜鈴聲", setting: "熄燈後的圖書館突然響起借書鈴，桌上只留下一張寫著核心詞的借閱卡", objective: "解釋這個詞，判斷失蹤者想提醒我們什麼", sentenceLead: "這張借閱卡證明，關鍵詞是" },
+      { title: "實驗室的破碎容器", setting: "化學實驗室門鎖完好，地上卻有一只破碎容器，標籤被換成新的核心詞", objective: "說明詞義，找出容器為何會出現在這裡", sentenceLead: "從容器標籤來看，我推斷" },
+      { title: "監視器裡的神秘身影", setting: "警衛室的影像停在凌晨兩點，神秘人對鏡頭比出與核心詞有關的暗號", objective: "把暗號翻譯成詞義，鎖定神秘人的行動目的", sentenceLead: "監視器裡的暗號代表" },
+      { title: "天台上的關鍵物證", setting: "強風吹過天台，一只資料袋被壓在磚塊下，封面正是這一幕的核心詞", objective: "解釋核心詞，讓物證與前三幕線索連起來", sentenceLead: "把前面的線索串起來，這個詞表示" },
+      { title: "禮堂的最終推理", setting: "全校師生聚集在黑暗禮堂，投影幕亮出最後一個核心詞，真相只差你的結案陳詞", objective: "完整說出詞義，完成最終推理並揭曉事件真相", sentenceLead: "各位，整起事件的真相是" },
+    ],
   },
   {
     id: "timetravel",
@@ -499,6 +507,13 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     role: "你是時間局派來的歷史修復員",
     setting: "時間線被打亂了，重要的知識碎片掉進了錯誤的年代",
     mission: "每個核心詞是一塊時空碎片——講出它的故事才能放回原位",
+    scenes: [
+      { title: "時間局警報", setting: "總部警報大響，第一塊知識碎片卡在錯誤年代", objective: "說明核心詞，把碎片送回正確座標", sentenceLead: "時間局確認，這塊碎片代表" },
+      { title: "古城的年代裂縫", setting: "你抵達一座古城，城門上的年份因核心詞而不斷改寫", objective: "解釋詞義，穩定正在崩解的年代", sentenceLead: "這道裂縫出現，是因為" },
+      { title: "蒸汽列車追逐", setting: "錯置的碎片登上高速蒸汽列車，車票印著新的核心詞", objective: "講出詞的故事，在列車進隧道前攔截碎片", sentenceLead: "這張車票告訴我們" },
+      { title: "未來博物館失控", setting: "未來博物館把錯誤歷史當成真相展出，中央展櫃顯示本幕核心詞", objective: "說明正確意義，修復被竄改的展覽", sentenceLead: "這件展品真正應該記錄的是" },
+      { title: "時間核心重啟", setting: "五條時間線在核心室交會，最後一塊碎片決定歷史能否恢復", objective: "完整解釋核心詞，重新啟動時間核心", sentenceLead: "我以歷史修復員的身分確認" },
+    ],
   },
   {
     id: "survival",
@@ -507,6 +522,13 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     role: "你是墜機後唯一清醒的求生專家",
     setting: "無人島上物資有限，你的知識就是活下去的關鍵",
     mission: "每個核心詞是一件救命工具——說明它的用途才能使用它",
+    scenes: [
+      { title: "墜機後的第一夜", setting: "暴雨將至，你在殘骸中找到標有核心詞的物資箱", objective: "解釋這個詞，決定物資如何幫助隊伍撐過夜晚", sentenceLead: "這箱物資的用途與關鍵詞有關，它是" },
+      { title: "淡水危機", setting: "隊伍的水快用完，岩壁上刻著第二個核心詞和一張水源圖", objective: "說明詞義，找到安全取得淡水的方法", sentenceLead: "要解決缺水，我們必須理解" },
+      { title: "叢林中的岔路", setting: "救援訊號忽然中斷，兩條獸徑中央掛著寫有核心詞的布條", objective: "解釋核心詞，選出能避開危險的路線", sentenceLead: "這條布條是在警告我們" },
+      { title: "風暴前的庇護所", setting: "海上風暴逼近，未完成的庇護所設計圖缺少一項核心詞", objective: "說明它的用途，帶領隊伍完成庇護所", sentenceLead: "庇護所能不能撐住，取決於" },
+      { title: "山頂救援訊號", setting: "你們終於抵達山頂，但發報機必須輸入最後一個核心詞的完整意義", objective: "完整解釋詞義，發出座標並等待救援", sentenceLead: "救援中心請注意，最後的通關資訊是" },
+    ],
   },
   {
     id: "auction",
@@ -515,6 +537,13 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     role: "你是拍賣會請來的傳奇鑑定師",
     setting: "五件神秘拍品即將開拍，真偽只有你能辨別",
     mission: "每個核心詞是一件拍品——鑑定出它的真正價值才能落槌",
+    scenes: [
+      { title: "沒有編號的拍品", setting: "預展室多出一只沒有編號的箱子，封條只寫著第一個核心詞", objective: "解釋詞義，判斷它是否有資格進入拍賣", sentenceLead: "依我的鑑定，這件拍品代表" },
+      { title: "偽造證書", setting: "第二件拍品附有兩張互相矛盾的證書，浮水印藏著核心詞", objective: "說明詞義，指出哪一張證書可疑", sentenceLead: "證書的破綻在於這個詞，它表示" },
+      { title: "蒙面買家的加價", setting: "蒙面買家突然喊出天價，並要求你先解讀拍品底座上的核心詞", objective: "解釋真正價值，避免全場被價格誤導", sentenceLead: "價格不是重點，真正的價值是" },
+      { title: "停電後的調包", setting: "拍賣廳停電十秒，燈亮後展台只剩一張寫有核心詞的卡片", objective: "說明詞義，辨認被調包的物件", sentenceLead: "根據這張卡片，我能確認" },
+      { title: "壓軸拍品落槌", setting: "最後一件拍品揭幕，全場等待你用核心詞做出最終鑑定", objective: "完整解釋詞義，決定成交或撤拍並揭露真相", sentenceLead: "各位競標者，我的最終鑑定是" },
+    ],
   },
 ];
 
