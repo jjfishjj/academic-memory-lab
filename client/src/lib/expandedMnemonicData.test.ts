@@ -11,9 +11,9 @@ describe("第二批離線口訣題庫", () => {
   });
 
   it("拆成三科初階與進階六包，每輪最多 15 題", () => {
-    expect(SUBJECT_PACKS).toHaveLength(6);
-    expect(SUBJECT_PACKS.map(pack => pack.items.length)).toEqual([15, 15, 15, 10, 10, 10]);
-    expect(new Set(SUBJECT_PACKS.flatMap(pack => pack.items.map(item => item.id))).size).toBe(75);
+    expect(SUBJECT_PACKS).toHaveLength(10);
+    expect(SUBJECT_PACKS.map(pack => pack.items.length)).toEqual([15, 15, 15, 10, 10, 10, 10, 10, 10, 10]);
+    expect(new Set(SUBJECT_PACKS.flatMap(pack => pack.items.map(item => item.id))).size).toBe(115);
   });
 
   it("60 題各有四模式與三標籤，共 720 句", () => {

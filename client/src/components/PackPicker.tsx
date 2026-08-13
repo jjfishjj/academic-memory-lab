@@ -2,8 +2,8 @@
  * 風格備忘：手帳拼貼學院 — 共用知識點卡包選擇器
  * 官方練習包 + 我的卡包 + 自建卡包入口，供三個訓練模板重用
  */
-import { useState } from "react";
-import { ArrowRight, Plus, Sparkles, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowRight, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
   SUBJECT_PACKS, loadCustomPacks, deleteCustomPack, type SubjectPack,
 } from "@/lib/gameData";
@@ -18,6 +18,25 @@ interface Props {
 export default function PackPicker({ onPick, note }: Props) {
   const [customPacks, setCustomPacks] = useState<SubjectPack[]>(() => loadCustomPacks());
   const [building, setBuilding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [subject, setSubject] = useState("all");
+  const [difficulty, setDifficulty] = useState("all");
+
+  const filteredPacks = useMemo(() => {
+    const keyword = query.trim().toLocaleLowerCase("zh-Hant");
+    return SUBJECT_PACKS
+      .filter(pack => subject === "all" || pack.subject === subject)
+      .filter(pack => difficulty === "all" || pack.difficulty === difficulty)
+      .map(pack => {
+        if (!keyword) return pack;
+        const packMatch = `${pack.name} ${pack.desc}`.toLocaleLowerCase("zh-Hant").includes(keyword);
+        const items = packMatch ? pack.items : pack.items.filter(item =>
+          `${item.term} ${item.hint} ${item.extra ?? ""}`.toLocaleLowerCase("zh-Hant").includes(keyword),
+        );
+        return { ...pack, items };
+      })
+      .filter(pack => pack.items.length > 0);
+  }, [difficulty, query, subject]);
 
   const removeCustomPack = (id: string) => {
     deleteCustomPack(id);
@@ -78,8 +97,32 @@ export default function PackPicker({ onPick, note }: Props) {
       )}
 
       <p className="doodle-note text-xl mb-3">starter packs — 官方練習包 ✎</p>
+      <div className="paper-card mb-5 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_160px_160px]" aria-label="題庫篩選器">
+        <label className="relative block">
+          <span className="sr-only">搜尋題目</span>
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={query} onChange={event => setQuery(event.target.value)}
+            placeholder="搜尋題目、解釋或關鍵字…"
+            className="h-11 w-full rounded-xl border-2 border-amber-200 bg-white/80 pl-9 pr-3 text-sm outline-none focus:border-primary dark:bg-slate-900/80" />
+        </label>
+        <label>
+          <span className="sr-only">科目</span>
+          <select value={subject} onChange={event => setSubject(event.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-amber-200 bg-white/80 px-3 text-sm font-bold dark:bg-slate-900/80">
+            <option value="all">全部科目</option><option value="english">英文</option><option value="history">歷史</option>
+            <option value="chemistry">化學</option><option value="biology">生物</option><option value="geography">地理</option>
+          </select>
+        </label>
+        <label>
+          <span className="sr-only">難度</span>
+          <select value={difficulty} onChange={event => setDifficulty(event.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-amber-200 bg-white/80 px-3 text-sm font-bold dark:bg-slate-900/80">
+            <option value="all">全部難度</option><option value="basic">初階</option><option value="advanced">進階</option>
+          </select>
+        </label>
+      </div>
       <div className="grid md:grid-cols-3 gap-6">
-        {SUBJECT_PACKS.map((p, i) => (
+        {filteredPacks.map((p, i) => (
           <button key={p.id} onClick={() => onPick(p)}
             className={`paper-card ${i % 2 === 0 ? "tilt-l" : "tilt-r"} p-6 text-left group relative`}>
             <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
@@ -94,6 +137,13 @@ export default function PackPicker({ onPick, note }: Props) {
           </button>
         ))}
       </div>
+      {filteredPacks.length === 0 && (
+        <div className="paper-card p-8 text-center" role="status">
+          <p className="text-3xl">🔎</p><p className="mt-2 font-display text-lg font-bold">找不到符合條件的題庫</p>
+          <p className="text-sm text-muted-foreground">換個關鍵字，或把科目與難度改回「全部」。</p>
+          <button type="button" onClick={() => { setQuery(""); setSubject("all"); setDifficulty("all"); }} className="mt-3 font-bold text-primary hover:underline">清除篩選</button>
+        </div>
+      )}
     </div>
   );
 }
