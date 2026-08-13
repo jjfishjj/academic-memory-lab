@@ -10,15 +10,15 @@ describe("內建口訣參考答案", () => {
     c1: ["na", "鈉"], c2: ["he", "氦"], c3: ["fe", "鐵"], c4: ["cl", "氯"], c5: ["au", "金"],
   };
 
-  it("完整覆蓋 15 題 × 4 模式 × 3 標籤，共 180 句", () => {
-    expect(items).toHaveLength(15);
+  it("完整覆蓋 75 題 × 4 模式 × 3 標籤，共 900 句", () => {
+    expect(items).toHaveLength(75);
     expect(MNEMONIC_STYLES).toHaveLength(4);
 
     const references = items.flatMap((item) =>
       MNEMONIC_STYLES.flatMap((style) => getMnemonicReferences(item, style)),
     );
 
-    expect(references).toHaveLength(180);
+    expect(references).toHaveLength(900);
     expect(references.every((reference) => reference.trim().length > 0)).toBe(true);
   });
 
