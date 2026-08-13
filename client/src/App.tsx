@@ -14,6 +14,7 @@ import PeriodicTutorial from "./pages/PeriodicTutorial";
 import AlkaliRoute from "./pages/AlkaliRoute";
 import HalogenRoute from "./pages/HalogenRoute";
 import ShadowEchoLab from "./pages/ShadowEchoLab";
+import PhoneticMagic from "./pages/PhoneticMagic";
 
 
 function Router() {
@@ -22,7 +23,7 @@ function Router() {
   return (
     <WouterRouter base={base || undefined}>
       <Switch>
-        <Route path={"/"} component={ShadowEchoLab} />
+        <Route path={"/"} component={PhoneticMagic} />
         <Route path={"/shadow-echo"} component={ShadowEchoLab} />
         <Route path={"/explore"} component={PeriodicTable} />
         <Route path={"/alkali"} component={AlkaliRoute} />
