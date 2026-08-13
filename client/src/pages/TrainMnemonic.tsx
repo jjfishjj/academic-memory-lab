@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
 import { generateAiMnemonicReferences, mnemonicAiAvailable } from "@/lib/mnemonicAi";
-import { removeMnemonicEntry, saveMnemonicEntry, type MnemonicLibraryEntry } from "@/lib/mnemonicLibrary";
+import { completeDailyWeaknessItem, loadMnemonicLibrary, removeMnemonicEntry, saveMnemonicEntry, type MnemonicLibraryEntry } from "@/lib/mnemonicLibrary";
 import { shareMnemonicCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
 import MnemonicLibraryPanel from "@/components/MnemonicLibraryPanel";
@@ -96,6 +96,7 @@ export default function TrainMnemonic() {
   const [ideaIndex, setIdeaIndex] = useState(loadReferenceToneIndex);
   const [aiSuggestions, setAiSuggestions] = useState<Record<string, string[]>>({});
   const [aiLoading, setAiLoading] = useState(false);
+  const [dailyReview, setDailyReview] = useState(false);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
@@ -103,17 +104,18 @@ export default function TrainMnemonic() {
   const startPack = (p: SubjectPack) => {
     setWorks(p.items.map((item) => ({ item, recalled: null })));
     setIdx(0);
+    setDailyReview(false);
     setPhase("create");
   };
 
-  const startLibraryReview = (entries: MnemonicLibraryEntry[], label: string) => {
+  const startLibraryReview = (entries: MnemonicLibraryEntry[], label: string, daily = false) => {
     const uniqueEntries = Array.from(new Map(entries.map(entry => [entry.itemId, entry])).values());
     setWorks(uniqueEntries.map(entry => ({
       item: { id: entry.itemId, term: entry.term, hint: entry.hint },
       style: MNEMONIC_STYLES.find(style => style.id === entry.styleId),
       mnemonic: entry.mnemonic, rating: entry.rating, bookmarked: entry.bookmarked, recalled: null,
     })));
-    setIdx(0); setPhase("create");
+    setIdx(0); setDailyReview(daily); setPhase("create");
     toast.success(`已建立「${label}」複習包，共 ${uniqueEntries.length} 題`);
   };
 
@@ -128,6 +130,7 @@ export default function TrainMnemonic() {
 
   const answer = (ok: boolean) => {
     updateWork({ recalled: ok });
+    if (dailyReview) completeDailyWeaknessItem(current.item.id, loadMnemonicLibrary());
     const c = ok ? combo + 1 : 0;
     setCombo(c);
     setBestCombo((b) => Math.max(b, c));
@@ -143,7 +146,7 @@ export default function TrainMnemonic() {
   };
 
   const restart = () => {
-    setPhase("pack"); setWorks([]); setIdx(0); setCombo(0); setBestCombo(0); setRevealed(false);
+    setPhase("pack"); setWorks([]); setIdx(0); setCombo(0); setBestCombo(0); setRevealed(false); setDailyReview(false);
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);

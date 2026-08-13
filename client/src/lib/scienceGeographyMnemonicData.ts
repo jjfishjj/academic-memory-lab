@@ -44,9 +44,54 @@ export const SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS: ExpandedMnemonicItem[] = [
   { id: "g20", subject: "geography", term: "永續發展", hint: "滿足當代需求且不損害後代滿足需求的能力", extra: "兼顧環境、社會與經濟面向", sound: "今天夠用，明天也留路", image: "三腳凳用環境、社會、經濟一起撐住未來", anchor: "永續發展兼顧當代需求與後代發展機會", chain: "滿足當代 → 保護資源環境 → 保留後代機會" },
 ];
 
+/** 逐題人工改寫的台灣生活系荒謬畫面；避免只套同一個迷因模板。 */
+export const TAIWAN_ABSURD_SCENES: Record<string, string> = {
+  b1: "粒線體在台電門口擺攤，拿 ATP 電池大喊『細胞沒電來這充』",
+  b2: "葉綠體在墾丁戴斗笠曬太陽，現場把二氧化碳炒成一盤葡萄糖",
+  b3: "核糖體化身早餐店阿姨，照 mRNA 點單把胺基酸做成蛋白質蛋餅",
+  b4: "細胞膜當夜市保全，沒有通行證的分子連一顆地瓜球都帶不進去",
+  b5: "DNA 在超商影印機拉開拉鍊，一股舊鏈配一股新鏈，印出兩份同款講義",
+  b6: "細胞去戶政事務所辦分身，櫃台啪一下發出兩張染色體同款身分證",
+  b7: "染色體搭台鐵轉乘兩次，最後四個配子各拿半套行李下車",
+  b8: "一對等位基因抽到不同機車鑰匙，形成配子時各騎一台分道揚鑣",
+  b9: "RNA 在立法院當逐字稿小編，把 DNA 發言一字不漏抄成訊息稿",
+  b10: "核糖體開同步口譯台，把 mRNA 密碼翻成一串胺基酸珍珠奶茶配料",
+  b11: "酵素在陽明山把反應陡坡鋪成溜滑梯，受質咻一下就變產物",
+  b12: "水分子排隊刷悠遊卡過膜，集體往溶質比較濃的車廂擠過去",
+  b13: "膜蛋白叫外送員扛貨逆著淡水老街人潮上坡，帳單指定用 ATP 結帳",
+  b14: "Y 字抗體像宮廟平安鎖，只認專屬抗原，別的入侵者想插隊都不行",
+  b15: "胰島素拿社區磁扣幫葡萄糖開門，血糖只好乖乖從走廊進細胞",
+  b16: "腎元開珍奶工廠，先過濾、再把好料吸回去，最後把廢物封杯送走",
+  b17: "神經訊息騎 YouBike 到突觸邊，改搭神經傳遞物渡輪跨過小縫",
+  b18: "環境像選秀評審按燈，能活又能生的性狀一路晉級到下一代",
+  b19: "草、兔、鷹在夜市傳雞排，箭頭永遠指向下一位真正吃到的人",
+  b20: "能量搭九份階梯往上爬，每上一層便當就少一半，頂層只剩菜渣",
+  g1: "台灣像漂在軟流圈上的巨大拼圖，板塊一動，地震群組立刻狂跳通知",
+  g2: "兩塊板塊在忠孝復興站迎面撞上，地面硬是擠出一座山和一排火山",
+  g3: "板塊像撕開蔥油餅往兩邊拉，岩漿立刻補上一條熱騰騰的新地殼",
+  g4: "兩板塊像會車不讓的機車水平擦身，卡太久就用地震一次放掉怒氣",
+  g5: "河流一路拿鏟子往下挖，挖到海平面被海巡舉牌說『不能再低了』",
+  g6: "河流衝出山口突然塞車，整車泥沙像辦桌扇形桌一口氣攤開",
+  g7: "河流到海邊交出泥沙，堆到連 Google 地圖都多出一塊三角形新土地",
+  g8: "微酸雨水拿粗吸管喝石灰岩，喝著喝著地下竟開出鐘乳石夜市",
+  g9: "濕風翻過中央山脈，把雨都寄在迎風坡，到了背風坡直接變乾熱吹風機",
+  g10: "季風有夏冬兩張悠遊卡，季節一換就在海陸之間整台列車反向行駛",
+  g11: "東太平洋泡熱湯，信風開始翹班，全球天氣像被亂按的選舉開票板",
+  g12: "東太平洋開冷氣，信風突然加班衝業績，全球雨帶跟著搬家",
+  g13: "台北水泥柏油白天集體存熱，晚上像一萬個暖暖包拒絕關機",
+  g14: "人口水龍頭先把死亡率轉小，出生率晚一步才關，水槽中間先滿到溢出",
+  g15: "每位上班族騎機車，後座同時疊著小孩和長輩，扶養比立刻有感",
+  g16: "核心城市像強力磁鐵，把資金人才吸走，邊陲只剩一卡車原料在省道上哭",
+  g17: "台南做牛肉湯、台中做珍奶，不比誰全能，只看放棄哪一鍋成本比較低",
+  g18: "科技公司集體搬進科學園區，工程師、晶片和八卦都能隔壁快速外送",
+  g19: "搭車、開冷氣、買雞排每一步都蓋一枚 CO₂ 印章，最後拼成超大碳腳印",
+  g20: "環境、社會、經濟三個人抬同一張辦桌，少一隻腳，下一代就整桌翻掉",
+};
+
 export function getScienceGeographyReferences(itemId: string, styleId: ExpandedStyleId): [string, string, string] | undefined {
   const item = SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS.find(candidate => candidate.id === itemId);
   if (!item) return undefined;
+  const taiwanScene = TAIWAN_ABSURD_SCENES[item.id] ?? item.image;
   const simple = {
     homophone: `${item.term} →「${item.sound}」：${item.hint}`,
     rhyme: `${item.term} 記一句：${item.sound}；${item.chain}`,
@@ -54,10 +99,10 @@ export function getScienceGeographyReferences(itemId: string, styleId: ExpandedS
     "story-chain": `${item.term} 記憶鏈：${item.chain}`,
   }[styleId];
   const absurd = {
-    homophone: `${item.term} →「${item.sound}」：${item.image}，荒謬到忘不了`,
-    rhyme: `${item.term} 一登場，${item.image}；再唸「${item.sound}」`,
-    meme: `沒人：…… ${item.term}：${item.image}。記住「${item.sound}」`,
-    "story-chain": `${item.term} 荒謬劇情：${item.image} → ${item.chain}`,
+    homophone: `${item.term} →「${item.sound}」：${taiwanScene}，這畫面有夠鬧`,
+    rhyme: `${item.term} 一登場，${taiwanScene}；再唸「${item.sound}」`,
+    meme: `沒人：…… ${item.term}：${taiwanScene}。台灣日常直接記住「${item.sound}」`,
+    "story-chain": `${item.term} 台味荒謬劇情：${taiwanScene} → ${item.chain}`,
   }[styleId];
   const exam = {
     homophone: `${item.term} 考試鉤子「${item.sound}」；得分句：${item.anchor}`,
