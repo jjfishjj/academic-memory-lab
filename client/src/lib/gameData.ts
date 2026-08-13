@@ -4,6 +4,10 @@
  * 情感故事卡（故事綁定+3 情境編碼+1 即時輸出+2）
  */
 import { EXPANDED_MNEMONIC_ITEMS } from "./expandedMnemonicData";
+import { SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS } from "./scienceGeographyMnemonicData";
+
+export type PackSubject = "english" | "history" | "chemistry" | "biology" | "geography" | "custom";
+export type PackDifficulty = "basic" | "advanced";
 
 export interface KnowledgeItem {
   id: string;
@@ -19,6 +23,8 @@ export interface SubjectPack {
   desc: string;
   items: KnowledgeItem[];
   custom?: boolean; // 使用者自建卡包
+  subject?: PackSubject;
+  difficulty?: PackDifficulty;
 }
 
 export const SUBJECT_PACKS: SubjectPack[] = [
@@ -27,6 +33,8 @@ export const SUBJECT_PACKS: SubjectPack[] = [
     name: "英文高頻單字 · 初階",
     emoji: "📖",
     desc: "15 題｜先練常考抽象單字與清楚定義",
+    subject: "english",
+    difficulty: "basic",
     items: [
       { id: "e1", term: "procrastinate", hint: "拖延", extra: "動詞：把該做的事一直往後推" },
       { id: "e2", term: "ambiguous", hint: "模稜兩可的", extra: "形容詞：有多種解釋、不明確" },
@@ -40,6 +48,8 @@ export const SUBJECT_PACKS: SubjectPack[] = [
     name: "歷史關鍵事件 · 初階",
     emoji: "🏛️",
     desc: "15 題｜從朝代建立到近代革命的核心年代",
+    subject: "history",
+    difficulty: "basic",
     items: [
       { id: "h1", term: "1789 法國大革命", hint: "攻佔巴士底監獄，革命爆發", extra: "自由與平等理念；1792 年廢除君主制" },
       { id: "h2", term: "1969 阿波羅 11 號", hint: "人類首次登月", extra: "阿姆斯壯的一小步" },
@@ -53,6 +63,8 @@ export const SUBJECT_PACKS: SubjectPack[] = [
     name: "化學元素特性 · 初階",
     emoji: "🧪",
     desc: "15 題｜常見元素、生活用途與基本性質",
+    subject: "chemistry",
+    difficulty: "basic",
     items: [
       { id: "c1", term: "Na 鈉", hint: "遇水劇烈反應，火焰呈黃色", extra: "活潑金屬，存於食鹽" },
       { id: "c2", term: "He 氦", hint: "最輕的惰性氣體，化性安定", extra: "會讓聲音聽起來尖細；不可刻意吸入" },
@@ -83,8 +95,25 @@ for (const config of subjectPackConfig) {
     name: `${config.name} · 進階`,
     emoji: config.emoji,
     desc: config.advancedDesc,
+    subject: config.subject,
+    difficulty: "advanced",
     items: expanded.slice(10),
   });
+}
+
+const newSubjectConfig = [
+  { subject: "biology", name: "生物核心概念", emoji: "🧬", basicDesc: "10 題｜細胞、遺傳與分子生物基礎", advancedDesc: "10 題｜生理、演化與生態整合" },
+  { subject: "geography", name: "地理關鍵概念", emoji: "🌏", basicDesc: "10 題｜地形、氣候與板塊作用", advancedDesc: "10 題｜人口、產業與永續發展" },
+] as const;
+
+for (const config of newSubjectConfig) {
+  const items = SCIENCE_GEOGRAPHY_MNEMONIC_ITEMS
+    .filter(item => item.subject === config.subject)
+    .map(({ id, term, hint, extra }) => ({ id, term, hint, extra }));
+  SUBJECT_PACKS.push(
+    { id: `${config.subject}-basic`, name: `${config.name} · 初階`, emoji: config.emoji, desc: config.basicDesc, subject: config.subject, difficulty: "basic", items: items.slice(0, 10) },
+    { id: `${config.subject}-advanced`, name: `${config.name} · 進階`, emoji: config.emoji, desc: config.advancedDesc, subject: config.subject, difficulty: "advanced", items: items.slice(10) },
+  );
 }
 
 export interface CampusScene {

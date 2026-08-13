@@ -7,14 +7,15 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Share2 } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Share2, MessageCircleWarning } from "lucide-react";
 import { toast } from "sonner";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
 import { generateAiMnemonicReferences, mnemonicAiAvailable } from "@/lib/mnemonicAi";
-import { removeMnemonicEntry, saveMnemonicEntry } from "@/lib/mnemonicLibrary";
+import { removeMnemonicEntry, saveMnemonicEntry, type MnemonicLibraryEntry } from "@/lib/mnemonicLibrary";
 import { shareMnemonicCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
+import MnemonicLibraryPanel from "@/components/MnemonicLibraryPanel";
 import TrainShell from "@/components/TrainShell";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
@@ -103,6 +104,17 @@ export default function TrainMnemonic() {
     setWorks(p.items.map((item) => ({ item, recalled: null })));
     setIdx(0);
     setPhase("create");
+  };
+
+  const startLibraryReview = (entries: MnemonicLibraryEntry[], label: string) => {
+    const uniqueEntries = Array.from(new Map(entries.map(entry => [entry.itemId, entry])).values());
+    setWorks(uniqueEntries.map(entry => ({
+      item: { id: entry.itemId, term: entry.term, hint: entry.hint },
+      style: MNEMONIC_STYLES.find(style => style.id === entry.styleId),
+      mnemonic: entry.mnemonic, rating: entry.rating, bookmarked: entry.bookmarked, recalled: null,
+    })));
+    setIdx(0); setPhase("create");
+    toast.success(`已建立「${label}」複習包，共 ${uniqueEntries.length} 題`);
   };
 
   const updateWork = (patch: Partial<Work>) => {
@@ -204,6 +216,18 @@ export default function TrainMnemonic() {
     toast("已淘汰這句，挑另一個或自己重寫吧");
   };
 
+  const reportHardToRemember = () => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    updateWork({ rating: 1 });
+    saveMnemonicEntry({
+      itemId: current.item.id, term: current.item.term, hint: current.item.hint,
+      styleId: current.style.id, styleName: current.style.name,
+      mnemonic: current.mnemonic.trim(), rating: 1,
+      bookmarked: current.bookmarked ?? false, feedback: "hard",
+    });
+    toast("已標記不好記，之後可在我的口訣庫處理");
+  };
+
   return (
     <TrainShell title="諧音口訣創作家" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
       {phase === "pack" && (
@@ -211,6 +235,7 @@ export default function TrainMnemonic() {
           <p className="font-hand text-2xl text-primary mb-1">step 1 — pick your material 🎤</p>
           <h1 className="font-display font-extrabold text-3xl mb-2">挑一包要變成口訣的知識點</h1>
           <p className="text-muted-foreground mb-6">年份、單字、流程都行——等一下我們把它們變成順口溜、冷笑話或迷因。</p>
+          <MnemonicLibraryPanel onTrainEntries={startLibraryReview} />
           <PackPicker onPick={startPack} note="荒謬程度 ∝ 記憶強度，準備好放飛 ✎" />
         </div>
       )}
@@ -321,6 +346,10 @@ export default function TrainMnemonic() {
                   <Button type="button" size="sm" variant="ghost" onClick={discardCurrent}
                     className="rounded-full font-bold text-red-700 hover:bg-red-50 hover:text-red-800">
                     <Trash2 className="h-4 w-4" /> 淘汰重寫
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={reportHardToRemember}
+                    className="rounded-full font-bold text-rose-700 hover:bg-rose-50 hover:text-rose-800">
+                    <MessageCircleWarning className="h-4 w-4" /> 不好記
                   </Button>
                 </div>
               </div>

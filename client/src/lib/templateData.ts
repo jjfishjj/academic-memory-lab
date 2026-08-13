@@ -5,6 +5,7 @@
  */
 import { type KnowledgeItem } from "./gameData";
 import { getExpandedMnemonicReferences } from "./expandedMnemonicData";
+import { getScienceGeographyReferences } from "./scienceGeographyMnemonicData";
 
 export interface TrainingTemplate {
   id: string;
@@ -448,6 +449,7 @@ const MNEMONIC_REFERENCES: Record<string, MnemonicReferenceByStyle> = {
 export function getMnemonicReferences(item: KnowledgeItem, style: MnemonicStyle): string[] {
   const tailored = MNEMONIC_REFERENCES[item.id]?.[style.id];
   const expanded = getExpandedMnemonicReferences(item.id, style.id as "homophone" | "rhyme" | "meme" | "story-chain");
+  const scienceGeography = getScienceGeographyReferences(item.id, style.id as "homophone" | "rhyme" | "meme" | "story-chain");
   const generic: Record<MnemonicStyle["id"], string> = {
     homophone: `${item.term} → 把讀音拆成中文近音，再接上「${item.hint}」的畫面`,
     rhyme: `${item.term} 記心頭，${item.hint} 不會漏`,
@@ -467,7 +469,7 @@ export function getMnemonicReferences(item: KnowledgeItem, style: MnemonicStyle)
     "story-chain": `${item.term} 的字頭排隊出發，最後一起找到「${item.hint}」`,
   };
 
-  return tailored ?? expanded ?? [generic[style.id], alternate[style.id], visual[style.id]];
+  return tailored ?? expanded ?? scienceGeography ?? [generic[style.id], alternate[style.id], visual[style.id]];
 }
 
 /* ---------------- 劇本殺：劇本設定 ---------------- */

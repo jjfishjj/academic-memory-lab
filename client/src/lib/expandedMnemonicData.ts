@@ -1,4 +1,4 @@
-export type ExpandedSubject = "english" | "history" | "chemistry";
+export type ExpandedSubject = "english" | "history" | "chemistry" | "biology" | "geography";
 export type ExpandedStyleId = "homophone" | "rhyme" | "meme" | "story-chain";
 
 export interface ExpandedMnemonicItem {
