@@ -3,6 +3,7 @@
  * 情境鉤子卡（情境編碼+3 主動回想+2 即時輸出+1）
  * 情感故事卡（故事綁定+3 情境編碼+1 即時輸出+2）
  */
+import { EXPANDED_MNEMONIC_ITEMS } from "./expandedMnemonicData";
 
 export interface KnowledgeItem {
   id: string;
@@ -22,10 +23,10 @@ export interface SubjectPack {
 
 export const SUBJECT_PACKS: SubjectPack[] = [
   {
-    id: "english",
-    name: "英文高頻單字",
+    id: "english-basic",
+    name: "英文高頻單字 · 初階",
     emoji: "📖",
-    desc: "學測 / 多益常考抽象單字，最難死背的那種",
+    desc: "15 題｜先練常考抽象單字與清楚定義",
     items: [
       { id: "e1", term: "procrastinate", hint: "拖延", extra: "動詞：把該做的事一直往後推" },
       { id: "e2", term: "ambiguous", hint: "模稜兩可的", extra: "形容詞：有多種解釋、不明確" },
@@ -35,32 +36,56 @@ export const SUBJECT_PACKS: SubjectPack[] = [
     ],
   },
   {
-    id: "history",
-    name: "歷史關鍵事件",
+    id: "history-basic",
+    name: "歷史關鍵事件 · 初階",
     emoji: "🏛️",
-    desc: "年份與事件總是配對失敗？把它們放進場景吧",
+    desc: "15 題｜從朝代建立到近代革命的核心年代",
     items: [
-      { id: "h1", term: "1789 法國大革命", hint: "攻佔巴士底監獄，推翻波旁王朝", extra: "自由、平等、博愛" },
+      { id: "h1", term: "1789 法國大革命", hint: "攻佔巴士底監獄，革命爆發", extra: "自由與平等理念；1792 年廢除君主制" },
       { id: "h2", term: "1969 阿波羅 11 號", hint: "人類首次登月", extra: "阿姆斯壯的一小步" },
-      { id: "h3", term: "1517 宗教改革", hint: "馬丁路德發表九十五條論綱", extra: "挑戰贖罪券制度" },
-      { id: "h4", term: "1929 經濟大恐慌", hint: "華爾街股市崩盤，全球蕭條", extra: "黑色星期四" },
+      { id: "h3", term: "1517 宗教改革", hint: "馬丁路德提出九十五條論綱", extra: "批判贖罪券的濫用" },
+      { id: "h4", term: "1929 經濟大恐慌", hint: "華爾街股災後，經濟危機蔓延全球", extra: "黑色星期四是跌勢開端之一" },
       { id: "h5", term: "1453 君士坦丁堡陷落", hint: "東羅馬帝國滅亡", extra: "鄂圖曼帝國崛起" },
     ],
   },
   {
-    id: "chemistry",
-    name: "化學元素特性",
+    id: "chemistry-basic",
+    name: "化學元素特性 · 初階",
     emoji: "🧪",
-    desc: "元素符號和特性像亂碼？給它們一點人設",
+    desc: "15 題｜常見元素、生活用途與基本性質",
     items: [
       { id: "c1", term: "Na 鈉", hint: "遇水劇烈反應，火焰呈黃色", extra: "活潑金屬，存於食鹽" },
-      { id: "c2", term: "He 氦", hint: "最輕的惰性氣體，不易反應", extra: "吸入聲音會變高" },
+      { id: "c2", term: "He 氦", hint: "最輕的惰性氣體，化性安定", extra: "會讓聲音聽起來尖細；不可刻意吸入" },
       { id: "c3", term: "Fe 鐵", hint: "易氧化生鏽，血紅素核心", extra: "人體必需微量元素" },
-      { id: "c4", term: "Cl 氯", hint: "黃綠色刺激性氣體，可消毒", extra: "游泳池的味道" },
+      { id: "c4", term: "Cl 氯", hint: "黃綠色有毒氣體；含氯藥劑可消毒", extra: "泳池刺鼻味多來自氯胺，不是氯氣本身" },
       { id: "c5", term: "Au 金", hint: "延展性極佳，抗腐蝕", extra: "一克金可拉成兩公里細絲" },
     ],
   },
 ];
+
+const subjectPackConfig = [
+  { subject: "english", basicId: "english-basic", advancedId: "english-advanced", name: "英文高頻單字", emoji: "📘", basicDesc: "15 題｜先練常考抽象單字與清楚定義", advancedDesc: "10 題｜進一步練多義字與學術字彙" },
+  { subject: "history", basicId: "history-basic", advancedId: "history-advanced", name: "歷史關鍵事件", emoji: "🗺️", basicDesc: "15 題｜從朝代建立到近代革命的核心年代", advancedDesc: "10 題｜世界大戰、國際秩序與冷戰轉折" },
+  { subject: "chemistry", basicId: "chemistry-basic", advancedId: "chemistry-advanced", name: "化學元素特性", emoji: "⚗️", basicDesc: "15 題｜常見元素、生活用途與基本性質", advancedDesc: "10 題｜材料、生理功能與安全風險" },
+] as const;
+
+for (const config of subjectPackConfig) {
+  const expanded = EXPANDED_MNEMONIC_ITEMS
+    .filter(item => item.subject === config.subject)
+    .map(({ id, term, hint, extra }) => ({ id, term, hint, extra }));
+  const basicPack = SUBJECT_PACKS.find(pack => pack.id === config.basicId);
+  if (basicPack) {
+    basicPack.desc = config.basicDesc;
+    basicPack.items.push(...expanded.slice(0, 10));
+  }
+  SUBJECT_PACKS.push({
+    id: config.advancedId,
+    name: `${config.name} · 進階`,
+    emoji: config.emoji,
+    desc: config.advancedDesc,
+    items: expanded.slice(10),
+  });
+}
 
 export interface CampusScene {
   id: string;

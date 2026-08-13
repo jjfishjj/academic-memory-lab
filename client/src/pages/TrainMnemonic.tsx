@@ -7,13 +7,17 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Wand2 } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Lightbulb, WandSparkles, Sparkles, Loader2, Star, Bookmark, Trash2, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
-import { MNEMONIC_STYLES, addTemplateStats, getMnemonicExample, type MnemonicStyle } from "@/lib/templateData";
+import { MNEMONIC_STYLES, addTemplateStats, getMnemonicReferences, type MnemonicStyle } from "@/lib/templateData";
+import { generateAiMnemonicReferences, mnemonicAiAvailable } from "@/lib/mnemonicAi";
+import { removeMnemonicEntry, saveMnemonicEntry } from "@/lib/mnemonicLibrary";
+import { shareMnemonicCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
-const STAMP = "/manus-storage/stamp-success_0e7612b4.png";
+const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
 type Phase = "pack" | "create" | "quiz" | "result";
 
@@ -21,6 +25,8 @@ interface Work {
   item: KnowledgeItem;
   style?: MnemonicStyle;
   mnemonic?: string;
+  rating?: number;
+  bookmarked?: boolean;
   recalled?: boolean | null;
 }
 
@@ -30,6 +36,48 @@ const STEPS = [
   { id: "quiz", label: "提取測驗" },
   { id: "result", label: "蓋章結算" },
 ];
+
+const REFERENCE_TONES = [
+  {
+    id: "simple", label: "簡單", emoji: "🌱", tip: "一句就懂",
+    panel: "border-emerald-400 bg-emerald-50/85 dark:border-emerald-500/70 dark:bg-emerald-950/90",
+    accent: "text-emerald-700 dark:text-emerald-300", text: "text-emerald-950 dark:text-emerald-50",
+    apply: "border-emerald-500 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500 dark:bg-emerald-950/70 dark:text-emerald-200 dark:hover:bg-emerald-900",
+    active: "border-emerald-700 bg-emerald-600 text-white shadow-sm dark:border-emerald-300 dark:bg-emerald-700",
+    inactive: "border-emerald-300 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200 dark:hover:bg-emerald-900",
+    decorations: ["🌱", "✦", "✓"], decoration: "text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    id: "absurd", label: "荒謬", emoji: "🤯", tip: "畫面最有梗",
+    panel: "border-rose-400 bg-rose-50/85 dark:border-rose-500/70 dark:bg-rose-950/90",
+    accent: "text-rose-700 dark:text-rose-300", text: "text-rose-950 dark:text-rose-50",
+    apply: "border-rose-500 text-rose-800 hover:bg-rose-100 dark:border-rose-500 dark:bg-rose-950/70 dark:text-rose-200 dark:hover:bg-rose-900",
+    active: "border-rose-700 bg-rose-600 text-white shadow-sm dark:border-rose-300 dark:bg-rose-700",
+    inactive: "border-rose-300 bg-rose-50/80 text-rose-800 hover:bg-rose-100 dark:border-rose-700 dark:bg-rose-950/70 dark:text-rose-200 dark:hover:bg-rose-900",
+    decorations: ["💥", "😂", "!?"], decoration: "text-rose-700 dark:text-rose-300",
+  },
+  {
+    id: "exam", label: "考試型", emoji: "🎯", tip: "緊扣得分點",
+    panel: "border-teal-500 bg-teal-50/85 dark:border-teal-400/70 dark:bg-teal-950/90",
+    accent: "text-teal-700 dark:text-teal-300", text: "text-teal-950 dark:text-teal-50",
+    apply: "border-teal-500 text-teal-800 hover:bg-teal-100 dark:border-teal-400 dark:bg-teal-950/70 dark:text-teal-200 dark:hover:bg-teal-900",
+    active: "border-teal-800 bg-teal-700 text-white shadow-sm dark:border-teal-200 dark:bg-teal-700",
+    inactive: "border-teal-300 bg-teal-50/80 text-teal-800 hover:bg-teal-100 dark:border-teal-700 dark:bg-teal-950/70 dark:text-teal-200 dark:hover:bg-teal-900",
+    decorations: ["🎯", "✎", "✓"], decoration: "text-teal-800 dark:text-teal-300",
+  },
+] as const;
+
+const REFERENCE_TONE_KEY = "memodesk-mnemonic-reference-tone";
+
+function loadReferenceToneIndex() {
+  try {
+    const savedTone = localStorage.getItem(REFERENCE_TONE_KEY);
+    const savedIndex = REFERENCE_TONES.findIndex((tone) => tone.id === savedTone);
+    return savedIndex >= 0 ? savedIndex : 0;
+  } catch {
+    return 0;
+  }
+}
 
 const stepColor = (id: string) =>
   id === "create" ? "bg-[#FDE68A] text-amber-900" :
@@ -44,6 +92,9 @@ export default function TrainMnemonic() {
   const [revealed, setRevealed] = useState(false);
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [ideaIndex, setIdeaIndex] = useState(loadReferenceToneIndex);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, string[]>>({});
+  const [aiLoading, setAiLoading] = useState(false);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
@@ -84,6 +135,74 @@ export default function TrainMnemonic() {
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
+  const suggestionKey = current?.style ? `${current.item.id}:${current.style.id}` : "";
+  const offlineReferences = current?.style ? getMnemonicReferences(current.item, current.style) : [];
+  const references = aiSuggestions[suggestionKey] ?? offlineReferences;
+  const currentReference = references[ideaIndex % Math.max(references.length, 1)];
+  const currentTone = REFERENCE_TONES[ideaIndex] ?? REFERENCE_TONES[0];
+
+  const selectReferenceTone = (referenceIndex: number) => {
+    setIdeaIndex(referenceIndex);
+    try {
+      localStorage.setItem(REFERENCE_TONE_KEY, REFERENCE_TONES[referenceIndex]?.id ?? REFERENCE_TONES[0].id);
+    } catch {
+      // localStorage unavailable: keep the choice for this session only.
+    }
+  };
+
+  const requestAiSuggestions = async () => {
+    if (!current?.style) return;
+    setAiLoading(true);
+    try {
+      const suggestions = await generateAiMnemonicReferences(current.item, current.style);
+      setAiSuggestions((all) => ({ ...all, [suggestionKey]: suggestions }));
+      toast.success("AI 已產生 3 個新靈感");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "AI 生成失敗，已保留離線答案");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const rateCurrent = (rating: number) => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    updateWork({ rating });
+    saveMnemonicEntry({
+      itemId: current.item.id,
+      term: current.item.term,
+      hint: current.item.hint,
+      styleId: current.style.id,
+      styleName: current.style.name,
+      mnemonic: current.mnemonic.trim(),
+      rating,
+      bookmarked: current.bookmarked ?? false,
+    });
+    toast.success(`已記錄好記度 ${rating} / 5`);
+  };
+
+  const toggleBookmark = () => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    const bookmarked = !current.bookmarked;
+    updateWork({ bookmarked });
+    saveMnemonicEntry({
+      itemId: current.item.id,
+      term: current.item.term,
+      hint: current.item.hint,
+      styleId: current.style.id,
+      styleName: current.style.name,
+      mnemonic: current.mnemonic.trim(),
+      rating: current.rating ?? 0,
+      bookmarked,
+    });
+    toast.success(bookmarked ? "已收藏到口訣庫" : "已取消收藏");
+  };
+
+  const discardCurrent = () => {
+    if (!current?.style || !current.mnemonic?.trim()) return;
+    removeMnemonicEntry(current.item.id, current.style.id, current.mnemonic.trim());
+    updateWork({ mnemonic: "", rating: undefined, bookmarked: false });
+    toast("已淘汰這句，挑另一個或自己重寫吧");
+  };
 
   return (
     <TrainShell title="諧音口訣創作家" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
@@ -105,7 +224,7 @@ export default function TrainMnemonic() {
           <p className="text-muted-foreground mb-1">口訣 {idx + 1} / {works.length} 句</p>
           <p className="doodle-note text-xl mb-4">越冷的梗，黏性越強 →</p>
 
-          <div className="sticky-note sticky-yellow-bg p-6 max-w-2xl relative tilt-l2">
+          <div className="sticky-note sticky-yellow-bg p-4 sm:p-6 max-w-2xl relative tilt-l2">
             <div className="washi washi-yellow" />
             <h2 className="font-display font-extrabold text-2xl text-amber-900 mb-1">{current.item.term}</h2>
             <p className="text-amber-800 mb-4">{current.item.hint}{current.item.extra ? ` — ${current.item.extra}` : ""}</p>
@@ -121,35 +240,94 @@ export default function TrainMnemonic() {
               ))}
             </div>
             {current.style && (
-              (() => {
-                const ex = getMnemonicExample(current.style.id, current.item);
-                return (
-                  <div className="crayon-dashed bg-white/60 rounded-lg p-3 mb-3">
-                    <p className="text-xs font-bold text-amber-900 mb-1">
-                      {ex.isTailored ? `✨ 幫你想好的「${current.item.term}」${current.style.name}範例：` : `✎ ${current.style.name}怎麼寫？照這個句型套：`}
-                    </p>
-                    <p className="font-hand text-xl text-amber-700 mb-2">{ex.text}</p>
-                    {ex.isTailored && (
-                      <Button size="sm" variant="outline" onClick={() => updateWork({ mnemonic: ex.text })}
-                        className="font-display font-bold rounded-full border-2 border-amber-600 text-amber-800 hover:bg-amber-600 hover:text-white active:scale-[0.97] transition-all">
-                        <Wand2 className="w-3.5 h-3.5" /> 直接用這個（還能再改）
+              <div data-tone={currentTone.id}
+                className={`relative mb-4 overflow-hidden rounded-xl border-2 border-dashed p-4 transition-colors duration-300 ${currentTone.panel}`}
+                aria-live="polite">
+                <div data-testid="reference-tone-decorations" aria-hidden="true"
+                  className={`pointer-events-none absolute inset-0 select-none opacity-[0.14] transition-colors duration-300 ${currentTone.decoration}`}>
+                  <span className="absolute -right-2 top-1 rotate-12 text-4xl">{currentTone.decorations[0]}</span>
+                  <span className="absolute bottom-1 left-9 -rotate-12 text-2xl font-black">{currentTone.decorations[1]}</span>
+                  <span className="absolute bottom-7 right-24 rotate-6 text-xl font-black">{currentTone.decorations[2]}</span>
+                </div>
+                <div className="relative z-10 flex items-start gap-3">
+                  <Lightbulb className={`mt-0.5 h-5 w-5 shrink-0 transition-colors ${currentTone.accent}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className={`text-xs font-bold uppercase tracking-wider transition-colors ${currentTone.accent}`}>
+                        {aiSuggestions[suggestionKey] ? "AI 參考答案" : "離線參考答案"} · {REFERENCE_TONES[ideaIndex]?.label ?? "簡單"}
+                      </p>
+                      <Button type="button" size="sm" variant="ghost" disabled={!mnemonicAiAvailable || aiLoading}
+                        onClick={requestAiSuggestions}
+                        title={mnemonicAiAvailable ? "請 AI 重新產生三個答案" : "部署 AI 端點後即可使用"}
+                        className={`h-8 rounded-full font-bold disabled:opacity-60 ${currentTone.accent}`}>
+                        {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        {mnemonicAiAvailable ? (aiSuggestions[suggestionKey] ? "換一批 AI" : "AI 生成 3 個") : "離線題庫模式"}
                       </Button>
-                    )}
+                    </div>
+                    <p key={`${suggestionKey}:${ideaIndex}:${aiSuggestions[suggestionKey] ? "ai" : "offline"}`}
+                      className={`reference-note-swap mt-2 break-words font-hand text-xl ${currentTone.text}`}>
+                      {currentReference}
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button type="button" size="sm" variant="outline"
+                        onClick={() => updateWork({ mnemonic: currentReference, rating: undefined, bookmarked: false })}
+                        className={`w-full rounded-full bg-white/75 font-bold sm:w-auto ${currentTone.apply}`}>
+                        <WandSparkles className="h-3.5 w-3.5" /> 套用這句
+                      </Button>
+                      <div className="grid w-full grid-cols-3 gap-1.5 sm:w-auto" aria-label="切換參考答案風格">
+                        {references.map((_, referenceIndex) => {
+                          const tone = REFERENCE_TONES[referenceIndex] ?? REFERENCE_TONES[0];
+                          return (
+                          <button key={referenceIndex} type="button" onClick={() => selectReferenceTone(referenceIndex)}
+                            aria-label={`切換成${tone.label}參考答案：${tone.tip}`}
+                            title={tone.tip}
+                            className={`min-h-10 rounded-xl border-2 px-2 py-1 text-xs font-bold transition-all active:scale-95 sm:min-w-24 ${referenceIndex === ideaIndex ? tone.active : tone.inactive}`}>
+                            <span aria-hidden="true">{tone.emoji}</span> {tone.label}
+                          </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                );
-              })()
+                </div>
+              </div>
             )}
 
             <p className="text-sm font-bold text-amber-900 mb-2">寫下你的口訣（唸出來測試一下順不順口）：</p>
             <Textarea
               value={current.mnemonic ?? ""}
-              onChange={(e) => updateWork({ mnemonic: e.target.value })}
-              placeholder={current.style ? "可以按上面「直接用這個」，或自己編一句更狂的" : "先在上面挑一種創作風格，就會出現幫你想好的範例"}
-              className="bg-white/80 border-amber-300 min-h-20"
+              onChange={(e) => updateWork({ mnemonic: e.target.value, rating: undefined })}
+              placeholder={`例：${current.style?.example ?? "ambulance → 俺不能死"}`}
+              className="bg-white/80 border-amber-300 min-h-24 text-base"
             />
-            <div className="flex justify-end mt-4">
+            {current.mnemonic?.trim() && current.style && (
+              <div className="mt-3 rounded-xl bg-white/45 p-3">
+                <p className="mb-2 text-sm font-bold text-amber-900">這句好不好記？</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1" aria-label="好記度評分">
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <button key={rating} type="button" onClick={() => rateCurrent(rating)}
+                        aria-label={`${rating} 顆星`}
+                        className="rounded-full p-1.5 hover:bg-amber-100 active:scale-90">
+                        <Star className={`h-5 w-5 ${rating <= (current.rating ?? 0) ? "fill-amber-500 text-amber-600" : "text-amber-500"}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={toggleBookmark}
+                    className="rounded-full border-amber-400 bg-white/70 font-bold text-amber-800">
+                    <Bookmark className={`h-4 w-4 ${current.bookmarked ? "fill-amber-600" : ""}`} />
+                    {current.bookmarked ? "已收藏" : "收藏"}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={discardCurrent}
+                    className="rounded-full font-bold text-red-700 hover:bg-red-50 hover:text-red-800">
+                    <Trash2 className="h-4 w-4" /> 淘汰重寫
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-stretch sm:justify-end mt-4">
               <Button onClick={nextCreate} disabled={!current.mnemonic?.trim()}
-                className="font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform">
+                className="w-full font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform sm:w-auto">
                 {idx < works.length - 1 ? "下一個知識點" : "進入提取測驗"} <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -237,6 +415,12 @@ export default function TrainMnemonic() {
                   <div>
                     <p className="font-display font-bold">{w.item.term} <span className="text-muted-foreground font-normal text-sm">— {w.item.hint}</span></p>
                     <p className="font-hand text-lg text-muted-foreground">{w.style?.emoji} "{w.mnemonic}"</p>
+                    {(w.rating || w.bookmarked) && (
+                      <p className="mt-1 text-xs font-bold text-amber-700">
+                        {w.rating ? `好記度 ${"★".repeat(w.rating)}${"☆".repeat(5 - w.rating)}` : "尚未評分"}
+                        {w.bookmarked ? " · 🔖 已收藏" : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -244,6 +428,22 @@ export default function TrainMnemonic() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
+            <Button onClick={async () => {
+              try {
+                const result = await shareMnemonicCard(works.map((w) => ({
+                  term: w.item.term,
+                  hint: w.item.hint,
+                  mnemonic: w.mnemonic ?? "",
+                  rating: w.rating,
+                })));
+                if (result === "shared") toast.success("分享卡已送出");
+                if (result === "downloaded") toast.success("分享卡已下載");
+              } catch {
+                toast.error("分享卡建立失敗，請稍後再試");
+              }
+            }} size="lg" variant="outline" className="w-full font-display font-bold rounded-full px-8 border-2 active:scale-[0.97] transition-transform sm:w-auto">
+              <Share2 className="w-4 h-4" /> 分享／下載成果卡
+            </Button>
             <Button onClick={restart} size="lg" className="font-display font-bold rounded-full px-8 active:scale-[0.97] transition-transform">
               <RotateCcw className="w-4 h-4" /> 再來一輪
             </Button>

@@ -86,6 +86,10 @@ export default function PackPicker({ onPick, note }: Props) {
             <div className="text-4xl mb-3">{p.emoji}</div>
             <h3 className="font-display font-bold text-xl mb-1 group-hover:text-primary transition-colors">{p.name}</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
+            <span className="mb-3 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+              本輪 {p.items.length} 題
+            </span>
+            <br />
             <span className="doodle-note text-xl inline-flex items-center gap-1">就決定是你了 <ArrowRight className="w-4 h-4" /></span>
           </button>
         ))}
@@ -93,4 +97,3 @@ export default function PackPicker({ onPick, note }: Props) {
     </div>
   );
 }
-

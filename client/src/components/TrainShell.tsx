@@ -3,10 +3,11 @@
  * 頂欄 + 索引標籤步驟指示，保持與雙卡任務一致的手帳操作感
  */
 import { Link } from "wouter";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Moon, Sun } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { useTheme } from "@/contexts/ThemeContext";
 
-const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
+const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
 
 interface Step { id: string; label: string }
 
@@ -22,18 +23,30 @@ interface Props {
 
 export default function TrainShell({ title, steps, stepIndex, stepColor, badge, children }: Props) {
   const progress = (stepIndex / (steps.length - 1)) * 100;
+  const { theme, toggleTheme } = useTheme();
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-40 bg-[#FAF6EE]/90 backdrop-blur-md border-b border-border">
+      <header className="sticky top-0 z-40 border-b border-border bg-[#FAF6EE]/90 backdrop-blur-md transition-colors dark:bg-[#17130F]/90">
         <div className="container flex items-center justify-between h-14">
           <Link href="/" className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors">
             <ArrowLeft className="w-4 h-4" /> 回首頁
           </Link>
           <div className="flex items-center gap-2">
             <img src={LOGO} alt="" className="w-6 h-6" />
-            <span className="font-display font-bold text-sm">記憶手帳社 · {title}</span>
+            <span className="hidden font-display font-bold text-sm sm:inline">記憶手帳社 · {title}</span>
+            <span className="font-display font-bold text-xs sm:hidden">{title}</span>
           </div>
-          <span className="font-hand text-lg text-primary">{badge ?? ""}</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden font-hand text-lg text-primary sm:inline">{badge ?? ""}</span>
+            {toggleTheme && (
+              <button type="button" onClick={toggleTheme}
+                aria-label={theme === "dark" ? "切換為淺色模式" : "切換為深色模式"}
+                title={theme === "dark" ? "切換為淺色模式" : "切換為深色模式"}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/70 text-foreground transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+            )}
+          </div>
         </div>
         <Progress value={progress} className="h-1 rounded-none" />
       </header>

@@ -6,13 +6,13 @@
 import { Link } from "wouter";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, MapPin, Heart, EyeOff, Stamp, Clock, Sparkles } from "lucide-react";
+import { ArrowRight, MapPin, Heart, EyeOff, Stamp, Clock, Sparkles, TrainFront, Atom, BrainCircuit, AudioLines } from "lucide-react";
 import { loadStats, type GymStats } from "@/lib/gameData";
 
-const LOGO = "/manus-storage/memodesk-logo_c083e7cf.png";
-const HERO = "/manus-storage/hero-desk_6de4c64c.png";
-const CAMPUS = "/manus-storage/scene-campus_32525752.png";
-const EMOTION = "/manus-storage/story-emotion_cd8d15ee.png";
+const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
+const HERO = `${import.meta.env.BASE_URL}assets/hero-desk_6de4c64c.png`;
+const CAMPUS = `${import.meta.env.BASE_URL}assets/scene-campus_32525752.png`;
+const EMOTION = `${import.meta.env.BASE_URL}assets/story-emotion_cd8d15ee.png`;
 
 function Navbar() {
   return (
@@ -79,6 +79,21 @@ export default function Home() {
             <span className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Clock className="w-4 h-4" /> 約 8 分鐘 · 免登入 · 進度自動保存
             </span>
+            <Link href="/train/elements">
+              <Button size="lg" variant="outline" className="font-display font-bold text-base rounded-full px-7 h-12">
+                <Atom className="w-5 h-5" /> 元素週期表特訓
+              </Button>
+            </Link>
+            <Link href="/memgenius">
+              <Button size="lg" variant="outline" className="font-display font-bold text-base rounded-full px-7 h-12 border-primary/40 bg-white/70">
+                <BrainCircuit className="w-5 h-5" /> MemGenius 五感遊戲館
+              </Button>
+            </Link>
+            <Link href="/shadow-echo">
+              <Button size="lg" variant="outline" className="font-display font-bold text-base rounded-full px-7 h-12 border-[#84f65f]/70 bg-[#0b1822] text-[#b7ff8b] hover:bg-[#102531] hover:text-white">
+                <AudioLines className="w-5 h-5" /> Shadow Echo 3D 跟讀
+              </Button>
+            </Link>
           </div>
           {stats && stats.completedRuns > 0 && (
             <div className="mt-6 inline-flex items-center gap-3 text-sm bg-secondary rounded-lg px-4 py-2 border border-border">
@@ -278,6 +293,30 @@ export default function Home() {
               </Link>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="py-14 bg-[#F3ECDD]/60 border-y border-border">
+        <div className="container max-w-5xl">
+          <Link href="/train/mrt">
+            <div className="paper-card tilt-l p-7 sm:p-9 group cursor-pointer relative overflow-hidden">
+              <div className="washi" />
+              <div className="grid sm:grid-cols-[auto_1fr_auto] items-center gap-5">
+                <span className="w-16 h-16 rounded-full bg-[#0070BD] text-white inline-flex items-center justify-center shadow-md"><TrainFront className="w-8 h-8" /></span>
+                <div>
+                  <p className="font-hand text-xl text-primary">new playable mission</p>
+                  <h2 className="font-display font-extrabold text-2xl sm:text-3xl group-hover:text-primary transition-colors">台北捷運全站記憶</h2>
+                  <p className="text-muted-foreground mt-2">選一條線，用雙向站卡與前後站補空，把站名、站碼和順序一起記住。</p>
+                  <div className="flex flex-wrap gap-2 mt-4 text-xs font-bold">
+                    <span className="bg-blue-100 text-blue-800 rounded-full px-3 py-1">六線完整資料</span>
+                    <span className="bg-amber-100 text-amber-800 rounded-full px-3 py-1">每輪 14 題</span>
+                    <span className="bg-emerald-100 text-emerald-800 rounded-full px-3 py-1">進度自動保存</span>
+                  </div>
+                </div>
+                <ArrowRight className="hidden sm:block w-7 h-7 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+              </div>
+            </div>
+          </Link>
         </div>
       </section>
 
