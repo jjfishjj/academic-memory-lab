@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Drama, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon } from "lucide-react";
+import { Drama, ArrowRight, EyeOff, HelpCircle, Lightbulb, RotateCcw, Home as HomeIcon } from "lucide-react";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { ROLEPLAY_SCRIPTS, addTemplateStats, takeItems, type RoleplayScript } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
@@ -21,7 +21,10 @@ interface Work {
   item: KnowledgeItem;
   line?: string; // 玩家的劇情演出台詞
   recalled?: boolean | null;
+  hintUsed?: number;
 }
+
+type StoryEnding = { id: "perfect" | "solved" | "twist"; icon: string; title: string; description: string };
 
 const STEPS = [
   { id: "pack", label: "選卡包" },
@@ -45,9 +48,21 @@ export default function TrainRoleplay() {
   const [revealed, setRevealed] = useState(false);
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [hintLevel, setHintLevel] = useState(0);
+  const [interlude, setInterlude] = useState(false);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
+  const scene = script?.scenes[idx];
+
+  const ending = useMemo<StoryEnding>(() => {
+    const evidence = works.slice(0, 4);
+    const detailed = evidence.filter((work) => (work.line?.trim().length ?? 0) >= 28 && work.line?.includes(work.item.term)).length;
+    const independent = evidence.filter((work) => !work.hintUsed).length;
+    if (detailed >= 3 && independent >= 3) return { id: "perfect", icon: "🌟", title: "完美結局 · 真相完全還原", description: "你幾乎不靠提示，就把線索與詞義完整串起來；第五幕將揭露真正的幕後安排。" };
+    if (detailed >= 2) return { id: "solved", icon: "✅", title: "成功結案 · 關鍵線索成立", description: "你的推理足以解開主要事件，第五幕將驗證最後一項證據。" };
+    return { id: "twist", icon: "🌀", title: "意外反轉 · 線索出現矛盾", description: "前四幕仍有詞義沒有說完整，第五幕將出現新的證人，讓你重新修正推理。" };
+  }, [works]);
 
   const startPack = (p: SubjectPack) => {
     setWorks(takeItems(p.items, 5).map((item) => ({ item, recalled: null })));
@@ -60,7 +75,12 @@ export default function TrainRoleplay() {
   };
 
   const nextPlay = () => {
-    if (idx < works.length - 1) setIdx(idx + 1);
+    updateWork({ hintUsed: hintLevel });
+    setHintLevel(0);
+    if (idx < works.length - 1) {
+      setInterlude(true);
+      window.setTimeout(() => { setIdx((value) => value + 1); setInterlude(false); }, 850);
+    }
     else { setIdx(0); setRevealed(false); setPhase("recall"); }
   };
 
@@ -83,6 +103,8 @@ export default function TrainRoleplay() {
   const restart = () => {
     setPhase("pack"); setScript(null); setWorks([]); setIdx(0);
     setCombo(0); setBestCombo(0); setRevealed(false);
+    setHintLevel(0);
+    setInterlude(false);
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
@@ -116,6 +138,7 @@ export default function TrainRoleplay() {
                 <p className="text-sm mb-1"><b>你的角色：</b>{sc.role}</p>
                 <p className="text-sm text-muted-foreground mb-2">{sc.setting}</p>
                 <p className="font-hand text-lg text-amber-700">{sc.mission}</p>
+                <p className="mt-2 text-xs font-bold text-primary">全劇共 5 幕，每幕都有不同場景與任務</p>
                 <span className="doodle-note text-xl inline-flex items-center gap-1 mt-2">開演 <ArrowRight className="w-4 h-4" /></span>
               </button>
             ))}
@@ -125,21 +148,46 @@ export default function TrainRoleplay() {
 
       {phase === "play" && current && script && (
         <div>
+          {interlude && <div className="fixed inset-0 z-50 grid place-items-center bg-[#251b2b]/80 p-6 backdrop-blur-sm" role="status" aria-live="polite"><div className="unlock-in max-w-md rounded-3xl border-2 border-pink-200 bg-[#fffaf0] p-8 text-center shadow-2xl"><span className="text-5xl">{script.emoji}</span><p className="mt-3 font-hand text-2xl text-pink-600">clue unlocked!</p><h2 className="font-display text-2xl font-extrabold">第 {idx + 1} 幕完成</h2><p className="mt-2 text-muted-foreground">下一站：{script.scenes[idx + 1]?.title}</p><div className="mx-auto mt-5 h-1.5 w-36 overflow-hidden rounded-full bg-pink-100"><span className="block h-full w-full origin-left animate-pulse bg-pink-500" /></div></div></div>}
           <p className="font-hand text-2xl text-pink-600 mb-1">step 3 — 玫瑰粉便利貼時間 🩷</p>
           <h1 className="font-display font-extrabold text-3xl mb-2 flex items-center gap-2">
-            {script.emoji} 第 {idx + 1} 幕 · 核心詞觸發！
+            {script.emoji} 第 {idx + 1} 幕 · {scene?.title ?? "核心詞觸發"}
           </h1>
           <p className="text-muted-foreground mb-1">{script.role} · 核心詞 {idx + 1} / {works.length}</p>
-          <p className="doodle-note text-xl mb-4">大聲唸出你的台詞，效果翻倍 →</p>
+          <p className="doodle-note text-xl mb-4">你不是在猜答案：請把核心詞的意思演成一句角色台詞 →</p>
+
+          <nav className="mb-6 max-w-3xl rounded-2xl border border-stone-200 bg-white/90 p-4" aria-label="五幕劇情進度地圖">
+            <div className="mb-3 flex items-center justify-between"><b className="font-display text-sm">🗺️ 劇情進度地圖</b><span className="text-xs text-muted-foreground">第 {idx + 1} / {works.length} 幕</span></div>
+            <ol className="grid grid-cols-5 gap-1">{script.scenes.map((item, sceneIndex) => <li key={item.title} className="relative text-center"><span className={`relative z-10 mx-auto grid h-8 w-8 place-items-center rounded-full border-2 text-xs font-black ${sceneIndex < idx ? "border-teal-600 bg-teal-500 text-white" : sceneIndex === idx ? "border-pink-700 bg-pink-500 text-white ring-4 ring-pink-100" : "border-stone-300 bg-[#fffaf0] text-stone-400"}`}>{sceneIndex < idx ? "✓" : sceneIndex + 1}</span><small className={`mt-2 block truncate text-[9px] ${sceneIndex === idx ? "font-bold text-pink-800" : "text-muted-foreground"}`}>{item.title}</small>{sceneIndex < 4 && <i className={`absolute left-[60%] right-[-40%] top-4 h-0.5 ${sceneIndex < idx ? "bg-teal-500" : "bg-stone-200"}`} />}</li>)}</ol>
+          </nav>
+
+          {idx === 4 && <section className={`mb-6 max-w-3xl rounded-2xl border-2 p-5 ${ending.id === "perfect" ? "border-amber-300 bg-amber-50" : ending.id === "solved" ? "border-teal-300 bg-teal-50" : "border-violet-300 bg-violet-50"}`} aria-label="第五幕故事走向"><p className="text-xs font-bold tracking-widest text-muted-foreground">YOUR STORY PATH</p><h2 className="mt-1 font-display text-xl font-extrabold">{ending.icon} {ending.title}</h2><p className="mt-1 text-sm text-muted-foreground">{ending.description}</p></section>}
+
+          <section className="mb-6 max-w-3xl rounded-2xl border-2 border-pink-200 bg-white/85 p-5 shadow-sm" aria-label="本關操作說明">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-pink-100 text-pink-700"><HelpCircle className="w-5 h-5" /></span>
+              <div><h2 className="font-display font-extrabold text-lg">這一幕要怎麼玩？</h2><p className="text-sm text-muted-foreground">目標是用自己的話解釋核心詞，不需要寫很長，一句完整台詞就能過關。</p></div>
+            </div>
+            <ol className="grid sm:grid-cols-3 gap-3 text-sm">
+              <li className="rounded-xl bg-pink-50 p-3"><b className="block text-pink-800 mb-1">1｜看劇情與核心詞</b>先理解自己扮演誰，以及這一幕出現哪個詞。</li>
+              <li className="rounded-xl bg-amber-50 p-3"><b className="block text-amber-800 mb-1">2｜想起詞的意思</b>忘記時可按「顯示提示」，系統會逐步協助。</li>
+              <li className="rounded-xl bg-teal-50 p-3"><b className="block text-teal-800 mb-1">3｜寫完並大聲唸</b>台詞要包含核心詞和它的意思，再按下一幕。</li>
+            </ol>
+          </section>
 
           <div className="sticky-note sticky-pink-bg p-6 max-w-2xl relative tilt-r">
             <div className="washi washi-pink" />
-            <p className="text-sm text-pink-900 font-bold mb-1">劇情：</p>
-            <p className="text-pink-800 mb-4">{script.setting}。此刻，核心詞 <b className="font-display text-lg">「{current.item.term}」</b> 出現了——{script.mission.split("——")[1] ?? script.mission}</p>
+            <p className="text-sm text-pink-900 font-bold mb-1">第 {idx + 1} 幕劇情：</p>
+            <p className="text-pink-800 mb-2">{scene?.setting ?? script.setting}。</p>
+            <p className="mb-4 rounded-lg bg-white/55 p-3 text-sm text-pink-950"><b>本幕任務：</b>{scene?.objective ?? (script.mission.split("——")[1] ?? script.mission)}；核心詞是 <b className="font-display text-lg">「{current.item.term}」</b>。</p>
 
-            <div className="sticky-note sticky-yellow-bg p-3 mb-4 tilt-l2 max-w-md">
-              <p className="text-xs font-bold text-amber-900 mb-0.5">📎 線索備忘（演完就會收走）</p>
-              <p className="text-sm text-amber-800">{current.item.hint}{current.item.extra ? ` — ${current.item.extra}` : ""}</p>
+            <div className="mb-4 max-w-xl rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-sm font-bold text-amber-950">💡 卡住了嗎？逐步打開提示</p><p className="text-xs text-amber-800">先自己回想；提示不影響過關，但少看一次記得更牢。</p></div>
+                {hintLevel < 2 && <Button type="button" variant="outline" onClick={() => setHintLevel((level) => { const next = level + 1; updateWork({ hintUsed: next }); return next; })} className="rounded-full border-amber-500 bg-white text-amber-900 font-bold hover:bg-amber-100"><Lightbulb className="w-4 h-4" />{hintLevel === 0 ? "顯示提示" : "再給我句型"}</Button>}
+              </div>
+              {hintLevel >= 1 && <div className="mt-3 rounded-lg bg-yellow-200/70 p-3 text-sm text-amber-950" aria-live="polite"><b>提示 1｜詞義：</b>{current.item.hint}{current.item.extra ? ` — ${current.item.extra}` : ""}</div>}
+              {hintLevel >= 2 && <div className="mt-2 rounded-lg bg-white p-3 text-sm text-pink-900" aria-live="polite"><b>提示 2｜本幕角色句型：</b>「{scene?.sentenceLead ?? "各位，我發現關鍵是"} <strong>{current.item.term}</strong>，它的意思是＿＿＿＿，所以＿＿＿＿。」</div>}
             </div>
 
             <p className="text-sm font-bold text-pink-900 mb-2">以「{script.role.replace("你是", "")}」的身分，說一段包含「{current.item.term}」和它意義的台詞：</p>
@@ -150,6 +198,7 @@ export default function TrainRoleplay() {
               className="bg-white/80 border-pink-300 min-h-24"
             />
             <div className="flex justify-end mt-4">
+              {!current.line?.trim() && <p className="mr-auto self-center text-xs font-bold text-pink-800">請先寫一句台詞，填入文字後「下一幕」才會亮起。</p>}
               <Button onClick={nextPlay} disabled={!current.line?.trim()}
                 className="font-display font-bold rounded-full bg-pink-600 hover:bg-pink-700 active:scale-[0.97] transition-transform">
                 {idx < works.length - 1 ? "下一幕" : "進入結案回想"} <ArrowRight className="w-4 h-4" />
@@ -171,7 +220,7 @@ export default function TrainRoleplay() {
             <div className="washi" />
             <span className="tape-corner tape-tr" />
             <p className="text-sm text-muted-foreground mb-1">你的線索：</p>
-            <p className="text-lg mb-1">{script.emoji} 第 {idx + 1} 幕 · 核心詞 <b>「{current.item.term}」</b></p>
+            <p className="text-lg mb-1">{script.emoji} 第 {idx + 1} 幕 · {scene?.title} · 核心詞 <b>「{current.item.term}」</b></p>
             {current.line && <p className="font-hand text-xl text-muted-foreground mb-1">你當時說："{current.line}"</p>}
 
             <div className="crayon-dashed mt-5 p-5 text-center">
@@ -216,6 +265,8 @@ export default function TrainRoleplay() {
           <p className="text-muted-foreground mb-8">
             真相還原 <b className="text-primary">{correctCount} / {works.length}</b> · 最佳連擊 <b className="text-primary">×{bestCombo}</b>
           </p>
+
+          <div className={`paper-card mb-8 p-6 ${ending.id === "perfect" ? "bg-amber-50" : ending.id === "solved" ? "bg-teal-50" : "bg-violet-50"}`}><span className="text-4xl">{ending.icon}</span><h2 className="mt-2 font-display text-2xl font-extrabold">{ending.title}</h2><p className="mt-2 text-muted-foreground">{ending.description}</p></div>
 
           <div className="grid grid-cols-3 gap-4 mb-10">
             {[
