@@ -7,9 +7,9 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon } from "lucide-react";
+import { Mic2, ArrowRight, EyeOff, RotateCcw, Home as HomeIcon, Wand2 } from "lucide-react";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
-import { MNEMONIC_STYLES, addTemplateStats, type MnemonicStyle } from "@/lib/templateData";
+import { MNEMONIC_STYLES, addTemplateStats, getMnemonicExample, type MnemonicStyle } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 
@@ -121,14 +121,30 @@ export default function TrainMnemonic() {
               ))}
             </div>
             {current.style && (
-              <p className="font-hand text-xl text-amber-700 mb-2">範例：{current.style.example}</p>
+              (() => {
+                const ex = getMnemonicExample(current.style.id, current.item);
+                return (
+                  <div className="crayon-dashed bg-white/60 rounded-lg p-3 mb-3">
+                    <p className="text-xs font-bold text-amber-900 mb-1">
+                      {ex.isTailored ? `✨ 幫你想好的「${current.item.term}」${current.style.name}範例：` : `✎ ${current.style.name}怎麼寫？照這個句型套：`}
+                    </p>
+                    <p className="font-hand text-xl text-amber-700 mb-2">{ex.text}</p>
+                    {ex.isTailored && (
+                      <Button size="sm" variant="outline" onClick={() => updateWork({ mnemonic: ex.text })}
+                        className="font-display font-bold rounded-full border-2 border-amber-600 text-amber-800 hover:bg-amber-600 hover:text-white active:scale-[0.97] transition-all">
+                        <Wand2 className="w-3.5 h-3.5" /> 直接用這個（還能再改）
+                      </Button>
+                    )}
+                  </div>
+                );
+              })()
             )}
 
             <p className="text-sm font-bold text-amber-900 mb-2">寫下你的口訣（唸出來測試一下順不順口）：</p>
             <Textarea
               value={current.mnemonic ?? ""}
               onChange={(e) => updateWork({ mnemonic: e.target.value })}
-              placeholder={`例：${current.style?.example ?? "ambulance → 俺不能死"}`}
+              placeholder={current.style ? "可以按上面「直接用這個」，或自己編一句更狂的" : "先在上面挑一種創作風格，就會出現幫你想好的範例"}
               className="bg-white/80 border-amber-300 min-h-20"
             />
             <div className="flex justify-end mt-4">
@@ -242,4 +258,3 @@ export default function TrainMnemonic() {
     </TrainShell>
   );
 }
-
