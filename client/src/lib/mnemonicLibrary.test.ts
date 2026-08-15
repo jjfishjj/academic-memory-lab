@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { completeDailyWeaknessItem, createMnemonicBackup, filterAndSortMnemonicEntries, loadDailyWeaknessProgress, loadMnemonicLibrary, mnemonicSubjectOf, ratingTrend, removeMnemonicEntryById, saveMnemonicEntry, selectWeakMnemonicEntries, subjectRatingTrends, updateMnemonicEntry, weaknessStreak, weeklyWeakMnemonicEntries } from "./mnemonicLibrary";
+import { completeDailyWeaknessItem, createMnemonicBackup, filterAndSortMnemonicEntries, loadDailyWeaknessProgress, loadMnemonicLibrary, mnemonicSubjectOf, ratingTrend, removeMnemonicEntryById, restoreMnemonicBackup, saveMnemonicEntry, selectWeakMnemonicEntries, subjectRatingTrends, updateMnemonicEntry, weaknessStreak, weeklyMnemonicSummary, weeklyWeakMnemonicEntries } from "./mnemonicLibrary";
 
 const entry = {
   itemId: "b1", term: "粒線體", hint: "產生 ATP", styleId: "homophone", styleName: "諧音梗",
@@ -103,5 +103,19 @@ describe("口訣庫狀態", () => {
     saveMnemonicEntry({ ...entry, note: "我的筆記", ratingHistory: [{ rating: 2, at: "2026-08-14T10:00:00Z" }] });
     const backup = createMnemonicBackup(loadMnemonicLibrary(), new Date(2026, 7, 15));
     expect(backup).toMatchObject({ version: 1, library: [{ note: "我的筆記" }], dailyProgress: { date: "2026-08-15" }, completedDays: [] });
+  });
+
+  it("可還原合法 JSON 備份並拒絕錯誤格式", () => {
+    saveMnemonicEntry({ ...entry, note: "還原筆記" });
+    const backup = createMnemonicBackup();
+    localStorage.clear();
+    restoreMnemonicBackup(backup);
+    expect(loadMnemonicLibrary()[0].note).toBe("還原筆記");
+    expect(() => restoreMnemonicBackup({ version: 2 })).toThrow("不是支援");
+  });
+
+  it("產生最近七天學習摘要", () => {
+    const items = [{ ...entry, id: "recent", updatedAt: "2026-08-15T10:00:00Z", rating: 4, ratingHistory: [{ rating: 2, at: "2026-08-14" }, { rating: 4, at: "2026-08-15" }] }];
+    expect(weeklyMnemonicSummary(items, new Date("2026-08-16T12:00:00Z"))).toMatchObject({ saved: 1, reviewed: 1, averageRating: 4, improved: 1, strongestSubject: "biology" });
   });
 });

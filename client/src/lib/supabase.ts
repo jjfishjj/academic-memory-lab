@@ -19,6 +19,11 @@ const SNAPSHOT_KEYS = [
   "memodesk-achievements-v1",
   "memodesk-mrt-personal-mnemonics",
   "memodesk-mrt-style-preferences",
+  "memodesk-mnemonic-library",
+  "memodesk-mnemonic-daily-weakness",
+  "memodesk-mnemonic-completed-days",
+  "memodesk-mnemonic-profile-name",
+  "memodesk-mnemonic-last-badge",
 ];
 const UPDATED_KEY = "memodesk-local-updated-at";
 
