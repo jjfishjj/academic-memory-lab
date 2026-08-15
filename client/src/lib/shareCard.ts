@@ -105,3 +105,27 @@ export async function shareMnemonicCard(items: ShareCardItem[]): Promise<ShareCa
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
   return "downloaded";
 }
+
+export async function shareStreakBadge(badge: { emoji: string; name: string; days: number }, streak: number): Promise<ShareCardResult> {
+  const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1080;
+  const context = canvas.getContext("2d"); if (!context) throw new Error("無法建立勳章分享卡");
+  const gradient = context.createLinearGradient(0, 0, 1080, 1080); gradient.addColorStop(0, "#fff7ed"); gradient.addColorStop(1, "#fde68a");
+  context.fillStyle = gradient; context.fillRect(0, 0, 1080, 1080);
+  context.strokeStyle = "#ea580c"; context.lineWidth = 18; context.strokeRect(38, 38, 1004, 1004);
+  context.textAlign = "center"; context.fillStyle = "#7c2d12";
+  context.font = "160px sans-serif"; context.fillText(badge.emoji, 540, 350);
+  context.font = "700 68px sans-serif"; context.fillText("記憶手帳社 · 勳章解鎖", 540, 480);
+  context.font = "700 86px sans-serif"; context.fillText(badge.name, 540, 615);
+  context.font = "700 52px sans-serif"; context.fillText(`連續完成 ${streak} 天弱項訓練`, 540, 730);
+  context.font = "32px sans-serif"; context.fillText("每天攻克一點，記憶就多長一點。", 540, 815);
+  context.font = "26px sans-serif"; context.fillText("MemoDesk · Academic Memory Lab", 540, 975);
+  const blob = await canvasToBlob(canvas);
+  const filename = `memodesk-badge-${badge.days}-days.png`;
+  const file = new File([blob], filename, { type: "image/png" });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ title: `勳章解鎖：${badge.name}`, text: `我已連續完成 ${streak} 天弱項訓練！`, files: [file] }); return "shared"; }
+    catch (error) { if (error instanceof DOMException && error.name === "AbortError") return "cancelled"; }
+  }
+  const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.download = filename; link.href = url; document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000); return "downloaded";
+}
