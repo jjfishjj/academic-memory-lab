@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { completeDailyWeaknessItem, filterAndSortMnemonicEntries, loadDailyWeaknessProgress, loadMnemonicLibrary, mnemonicSubjectOf, ratingTrend, removeMnemonicEntryById, saveMnemonicEntry, selectWeakMnemonicEntries, updateMnemonicEntry } from "./mnemonicLibrary";
+import { completeDailyWeaknessItem, createMnemonicBackup, filterAndSortMnemonicEntries, loadDailyWeaknessProgress, loadMnemonicLibrary, mnemonicSubjectOf, ratingTrend, removeMnemonicEntryById, saveMnemonicEntry, selectWeakMnemonicEntries, subjectRatingTrends, updateMnemonicEntry, weaknessStreak, weeklyWeakMnemonicEntries } from "./mnemonicLibrary";
 
 const entry = {
   itemId: "b1", term: "粒線體", hint: "產生 ATP", styleId: "homophone", styleName: "諧音梗",
@@ -66,5 +66,42 @@ describe("口訣庫狀態", () => {
     const saved = loadMnemonicLibrary()[0];
     expect(saved.ratingHistory?.map(point => point.rating)).toEqual([2, 4]);
     expect(ratingTrend(saved)).toBe(2);
+  });
+
+  it("完成每日清單後累積連續天數", () => {
+    const weak = [{ ...entry, id: "one", itemId: "b1", rating: 1, updatedAt: "2026-08-13" }];
+    completeDailyWeaknessItem("b1", weak, new Date(2026, 7, 12));
+    completeDailyWeaknessItem("b1", weak, new Date(2026, 7, 13));
+    expect(weaknessStreak(new Date(2026, 7, 14))).toBe(2);
+  });
+
+  it("產生本週最弱去重題庫與各科評分趨勢", () => {
+    const items = [
+      { ...entry, id: "b-one", itemId: "b1", rating: 1, updatedAt: "2026-08-13T10:00:00Z", ratingHistory: [{ rating: 1, at: "2026-08-12T10:00:00Z" }, { rating: 3, at: "2026-08-13T10:00:00Z" }] },
+      { ...entry, id: "b-two", itemId: "b1", rating: 2, updatedAt: "2026-08-13T11:00:00Z" },
+      { ...entry, id: "old", itemId: "g1", rating: 1, updatedAt: "2026-07-01T10:00:00Z" },
+    ];
+    expect(weeklyWeakMnemonicEntries(items, new Date("2026-08-14T12:00:00Z")).map(item => item.itemId)).toEqual(["b1"]);
+    expect(subjectRatingTrends(items, 7, new Date("2026-08-14T12:00:00Z"))[0]).toMatchObject({ subject: "biology", points: [{ rating: 1 }, { rating: 3 }] });
+  });
+
+  it("個人筆記可保存並更新", () => {
+    saveMnemonicEntry(entry);
+    updateMnemonicEntry(loadMnemonicLibrary()[0].id, { note: "考前先想起台電發電機" });
+    expect(loadMnemonicLibrary()[0].note).toBe("考前先想起台電發電機");
+  });
+
+  it("7／30 天趨勢會排除區間外評分", () => {
+    const item = { ...entry, id: "trend", updatedAt: "2026-08-14", ratingHistory: [
+      { rating: 1, at: "2026-07-20T10:00:00Z" }, { rating: 2, at: "2026-08-10T10:00:00Z" }, { rating: 4, at: "2026-08-14T10:00:00Z" },
+    ] };
+    expect(subjectRatingTrends([item], 7, new Date("2026-08-15T12:00:00Z"))[0].points.map(point => point.rating)).toEqual([2, 4]);
+    expect(subjectRatingTrends([item], 30, new Date("2026-08-15T12:00:00Z"))[0].points.map(point => point.rating)).toEqual([1, 2, 4]);
+  });
+
+  it("JSON 備份包含收藏、筆記、評分、每日進度與完成日期", () => {
+    saveMnemonicEntry({ ...entry, note: "我的筆記", ratingHistory: [{ rating: 2, at: "2026-08-14T10:00:00Z" }] });
+    const backup = createMnemonicBackup(loadMnemonicLibrary(), new Date(2026, 7, 15));
+    expect(backup).toMatchObject({ version: 1, library: [{ note: "我的筆記" }], dailyProgress: { date: "2026-08-15" }, completedDays: [] });
   });
 });
