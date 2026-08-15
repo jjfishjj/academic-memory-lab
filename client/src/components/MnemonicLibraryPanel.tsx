@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bookmark, ChevronDown, ChevronUp, Download, Eye, MessageCircleWarning, NotebookPen, Share2, Trash2, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronUp, Cloud, Download, Eye, MessageCircleWarning, NotebookPen, Share2, Trash2, Upload, X } from "lucide-react";
+import { Link } from "wouter";
 import { filterAndSortMnemonicEntries, loadMnemonicLibrary, mnemonicSubjectOf, removeMnemonicEntryById, selectWeakMnemonicEntries, updateMnemonicEntry } from "@/lib/mnemonicLibrary";
 import type { MnemonicLibraryEntry, MnemonicLibrarySort, MnemonicLibrarySubject } from "@/lib/mnemonicLibrary";
 import { SUBJECT_PACKS } from "@/lib/gameData";
 import { getMnemonicReferences, MNEMONIC_STYLES } from "@/lib/templateData";
 import { loadDailyWeaknessProgress, ratingTrend, saveMnemonicEntry } from "@/lib/mnemonicLibrary";
 import { STREAK_BADGES, subjectRatingTrends, weaknessStreak, weeklyWeakMnemonicEntries } from "@/lib/mnemonicLibrary";
-import { createMnemonicBackup } from "@/lib/mnemonicLibrary";
+import { createMnemonicBackup, MNEMONIC_PROFILE_NAME_KEY, restoreMnemonicBackup, weeklyMnemonicSummary } from "@/lib/mnemonicLibrary";
 import { shareStreakBadge } from "@/lib/shareCard";
 import { toast } from "sonner";
 
@@ -20,6 +21,7 @@ export default function MnemonicLibraryPanel({ onTrainEntries }: Props) {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [trendDays, setTrendDays] = useState<7 | 30>(7);
   const [unlockedBadge, setUnlockedBadge] = useState<(typeof STREAK_BADGES)[number] | null>(null);
+  const [profileName, setProfileName] = useState(() => localStorage.getItem(MNEMONIC_PROFILE_NAME_KEY) ?? "");
   const favorites = useMemo(() => entries.filter(entry => entry.bookmarked).length, [entries]);
   const hard = useMemo(() => entries.filter(entry => entry.feedback === "hard").length, [entries]);
   const lowRated = useMemo(() => entries.filter(entry => entry.rating > 0 && entry.rating < 3).length, [entries]);
@@ -32,6 +34,7 @@ export default function MnemonicLibraryPanel({ onTrainEntries }: Props) {
   const streak = useMemo(() => weaknessStreak(), [daily.completedIds]);
   const weeklyWeak = useMemo(() => weeklyWeakMnemonicEntries(entries), [entries]);
   const trends = useMemo(() => subjectRatingTrends(entries, trendDays), [entries, trendDays]);
+  const weeklySummary = useMemo(() => weeklyMnemonicSummary(entries), [entries, daily.completedIds]);
   const visibleEntries = useMemo(() => filterAndSortMnemonicEntries(entries, subject, sort), [entries, sort, subject]);
   const detailItem = useMemo(() => SUBJECT_PACKS.flatMap(pack => pack.items).find(item => item.id === detailItemId), [detailItemId]);
 
@@ -59,6 +62,19 @@ export default function MnemonicLibraryPanel({ onTrainEntries }: Props) {
     const url = URL.createObjectURL(blob); const link = document.createElement("a");
     link.download = `memodesk-backup-${new Date().toISOString().slice(0, 10)}.json`; link.href = url; document.body.appendChild(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000); toast.success("JSON 備份已下載");
+  };
+  const importBackup = async (file?: File) => {
+    if (!file) return;
+    try {
+      if (file.size > 2_000_000) throw new Error("備份檔超過 2 MB，請確認檔案是否正確");
+      restoreMnemonicBackup(JSON.parse(await file.text()));
+      setProfileName(localStorage.getItem(MNEMONIC_PROFILE_NAME_KEY) ?? ""); refresh();
+      toast.success("備份已還原，口訣、筆記與進度都回來了");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "備份還原失敗"); }
+  };
+  const saveProfileName = (name: string) => {
+    const next = name.slice(0, 30); setProfileName(next);
+    localStorage.setItem(MNEMONIC_PROFILE_NAME_KEY, next); localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
   };
 
   return (
@@ -108,7 +124,22 @@ export default function MnemonicLibraryPanel({ onTrainEntries }: Props) {
               return <div key={series.subject} className="rounded-lg bg-muted/60 p-3"><div className="flex justify-between text-xs font-bold"><span>{{english:"英文",history:"歷史",chemistry:"化學",biology:"生物",geography:"地理",custom:"自訂"}[series.subject]}</span><span>{series.points[0].rating.toFixed(1)} → {series.points.at(-1)!.rating.toFixed(1)}</span></div><svg viewBox="0 0 200 100" className="mt-2 h-24 w-full" role="img" aria-label={`${series.subject}評分趨勢折線圖`}><path d="M12 16V88H188" fill="none" stroke="currentColor" strokeOpacity=".2"/><polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>{series.points.map((point,index)=><circle key={`${point.date}-${index}`} cx={12 + index * (176 / Math.max(series.points.length - 1, 1))} cy={88 - (point.rating - 1) * 18} r="4" fill={color}><title>{point.date}：{point.rating.toFixed(1)} 星</title></circle>)}</svg></div>;
             })}</div> : <p className="mt-2 text-xs text-muted-foreground">最近 {trendDays} 天內，同一科目累積兩個不同日期的評分後，這裡會出現折線圖。</p>}
           </div>
-          <button type="button" onClick={exportBackup} className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-slate-50 p-3 text-sm font-bold text-slate-800 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-100"><Download className="h-4 w-4" />匯出每日進度、筆記與評分 JSON 備份</button>
+          <div className="mb-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/70 p-4 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+            <div className="flex items-center justify-between gap-3"><div><b>🗓️ 本週學習摘要</b><p className="text-xs">最近 7 天的口訣成果</p></div><span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold">完成 {weeklySummary.completedDays} 天</span></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{[
+              ["保存口訣", weeklySummary.saved], ["複習題目", weeklySummary.reviewed], ["平均評分", weeklySummary.averageRating ? `${weeklySummary.averageRating.toFixed(1)}★` : "—"], ["進步口訣", weeklySummary.improved],
+            ].map(([label, value]) => <div key={label} className="rounded-lg bg-white/70 p-2 text-center dark:bg-slate-900/60"><strong className="block text-lg">{value}</strong><span className="text-[11px]">{label}</span></div>)}</div>
+            <p className="mt-3 text-xs">本週優勢科目：<b>{{english:"英文",history:"歷史",chemistry:"化學",biology:"生物",geography:"地理",custom:"自訂"}[weeklySummary.strongestSubject ?? "custom"]}</b></p>
+          </div>
+          <div className="mb-4 rounded-xl border bg-muted/50 p-4">
+            <label className="text-xs font-bold">分享卡顯示名稱<input value={profileName} maxLength={30} onChange={event => saveProfileName(event.target.value)} placeholder="例如：小明、記憶旅人" className="mt-1 h-10 w-full rounded-xl border bg-background px-3 text-sm font-normal" /></label>
+            <p className="mt-2 text-xs text-muted-foreground">成果分享卡會自動加入名稱，以及英文、歷史、化學、生物、地理的題數統計。</p>
+          </div>
+          <div className="mb-4 grid gap-2 sm:grid-cols-3">
+            <button type="button" onClick={exportBackup} className="flex items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-slate-50 p-3 text-sm font-bold text-slate-800 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-100"><Download className="h-4 w-4" />匯出 JSON</button>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-sky-300 bg-sky-50 p-3 text-sm font-bold text-sky-900 hover:bg-sky-100 dark:bg-sky-950 dark:text-sky-100"><Upload className="h-4 w-4" />匯入還原<input type="file" accept="application/json,.json" className="sr-only" onChange={event => { void importBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>
+            <Link href="/train/mrt/sync" className="flex items-center justify-center gap-2 rounded-xl border-2 border-teal-300 bg-teal-50 p-3 text-sm font-bold text-teal-900 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-100"><Cloud className="h-4 w-4" />雲端同步</Link>
+          </div>
           <div className="mb-4 grid gap-2 sm:grid-cols-2">
             <label className="text-xs font-bold text-muted-foreground">科目
               <select value={subject} onChange={event => setSubject(event.target.value as "all" | MnemonicLibrarySubject)} className="mt-1 h-10 w-full rounded-xl border bg-background px-3 text-sm text-foreground">
