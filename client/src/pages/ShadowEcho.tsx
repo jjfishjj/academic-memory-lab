@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+/**
+ * 設計風格提醒：MemoDesk 夜自習語音手帳。維持紙卡＋回形針＋社團章戳、米白底與 teal 墨水；
+ * 亮黃代表情境朗讀提示，玫瑰粉代表情緒語氣提示。3D 教練是桌面上的互動貼紙，不是獨立副品牌。
+ */
 import { Link } from "wouter";
 import { ArrowLeft, AudioLines, Brain, ChevronRight, CircleStop, Flame, Gauge, Headphones, Mic, Music2, Play, RotateCcw, Settings2, Sparkles, Target } from "lucide-react";
 import ShadowCoach3D from "@/components/ShadowCoach3D";
 import ShadowAnalysisCard from "@/components/ShadowAnalysisCard";
+import ShadowBootScreen, { BOOT_STAGES, type BootStageId } from "@/components/ShadowBootScreen";
 import { assessSpeech, type SpeechAssessment } from "@/lib/speechAssessment";
 import { LANGUAGE_CODES, SHADOW_CATEGORIES, SHADOW_DIFFICULTIES, dailyLessonIds, lessonsFor, type ShadowCategory, type ShadowDifficulty, type ShadowLanguage } from "@/lib/shadowEchoData";
 import { completedLessonIds, loadShadowProgress, saveShadowAttempt } from "@/lib/shadowEchoProgress";
@@ -56,6 +61,32 @@ export default function ShadowEcho() {
   const energyRef = useRef<number[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationRef = useRef<number | null>(null);
+  const [bootDone, setBootDone] = useState<Record<BootStageId, boolean>>({ chunk: false, webgl: false, voice: false, frame: false });
+  const [bootHidden, setBootHidden] = useState(false);
+
+  // 進度＝已完成階段的權重總和，反映真實載入狀態而非計時假動畫。
+  const bootProgress = BOOT_STAGES.reduce((sum, stage) => sum + (bootDone[stage.id] ? stage.weight : 0), 0);
+  const bootReady = bootDone.frame;
+  const currentBootStage = BOOT_STAGES.find((stage) => !bootDone[stage.id])?.label ?? "準備完成";
+
+  // chunk 已執行到這裡代表 three.js 套件解析完畢；語音引擎則檢查 API 可用性。
+  useEffect(() => {
+    setBootDone((previous) => ({ ...previous, chunk: true }));
+    const markVoice = () => setBootDone((previous) => ({ ...previous, voice: true }));
+    if (!("speechSynthesis" in window)) { markVoice(); return; }
+    if (window.speechSynthesis.getVoices().length > 0) { markVoice(); return; }
+    window.speechSynthesis.addEventListener("voiceschanged", markVoice, { once: true });
+    // 部分瀏覽器不會觸發 voiceschanged，設定保險上限避免卡住。
+    const fallback = window.setTimeout(markVoice, 1600);
+    return () => { window.speechSynthesis.removeEventListener("voiceschanged", markVoice); window.clearTimeout(fallback); };
+  }, []);
+
+  // 就緒後讓過場淡出再卸載，避免畫面突然閃斷。
+  useEffect(() => {
+    if (!bootReady) return;
+    const timer = window.setTimeout(() => setBootHidden(true), 560);
+    return () => window.clearTimeout(timer);
+  }, [bootReady]);
 
   const lessons = useMemo(() => mode === "boss" ? lessonsFor(language) : lessonsFor(language, difficulty, category), [language, difficulty, category, mode]);
   const lesson = lessons[lessonIndex % lessons.length];
@@ -170,37 +201,38 @@ export default function ShadowEcho() {
 
   return <main className="se-lab">
     <header className="se-topbar">
-      <Link href="/" className="se-brand" aria-label="返回記憶手帳社首頁"><span className="se-logo"><AudioLines /></span><span><b>SHADOW ECHO</b><small>LANGUAGE LAB</small></span></Link>
-      <div className="se-daily"><span>今日任務</span><div><i style={{ width: `${Math.max(8, (dailyDone / dailyIds.length) * 100)}%` }} /></div><b>{dailyDone}/{dailyIds.length}</b></div>
-      <div className="se-head-actions"><button className="se-streak"><Flame /> {progress.streak} 天連勝</button><button className="se-round-button" aria-label="個人化設定"><Settings2 /></button></div>
+      <Link href="/" className="se-brand" aria-label="返回記憶手帳社首頁"><span className="se-logo"><AudioLines /></span><span><b>記憶手帳社 MemoDesk</b><small>夜自習 · 語音貼紙任務</small></span></Link>
+      <div className="se-daily"><span>今日朗讀章戳</span><div><i style={{ width: `${Math.max(8, (dailyDone / dailyIds.length) * 100)}%` }} /></div><b>{dailyDone}/{dailyIds.length}</b></div>
+      <div className="se-head-actions"><button className="se-streak"><Flame /> 連讀 {progress.streak} 天</button><button className="se-round-button" aria-label="練習設定"><Settings2 /></button></div>
     </header>
     <div className="se-layout">
       <aside className="se-sidebar">
         <Link href="/" className="se-back"><ArrowLeft /> 返回 MemoDesk</Link>
         <label>語言<select value={language} onChange={(event) => { setLanguage(event.target.value as ShadowLanguage); resetCourse(); }}>{Object.keys(LANGUAGE_CODES).map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>情境<select value={category ?? "all"} onChange={(event) => { setCategory(event.target.value === "all" ? undefined : event.target.value as ShadowCategory); resetCourse(); }}><option value="all">全部情境</option>{SHADOW_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <div className="se-label">遊戲模式</div><div className="se-mode-list">{MODES.map((item) => { const Icon = item.icon; return <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => selectMode(item.id)}><Icon /><span><b>{item.name}</b><small>{item.detail}</small></span></button>; })}</div>
+        <div className="se-label">朗讀貼紙模式</div><div className="se-mode-list">{MODES.map((item) => { const Icon = item.icon; return <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => selectMode(item.id)}><Icon /><span><b>{item.name}</b><small>{item.detail}</small></span></button>; })}</div>
         <label>難度<select value={difficulty} onChange={(event) => { setDifficulty(event.target.value as ShadowDifficulty); resetCourse(); }}>{SHADOW_DIFFICULTIES.map((item) => <option key={item}>{item}</option>)}</select></label>
         <div className="se-label">速度</div><div className="se-speed" role="group" aria-label="語音速度">{(["slow", "normal", "fast"] as Speed[]).map((item) => <button key={item} className={speed === item ? "active" : ""} onClick={() => setSpeed(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
-        <div className="se-profile"><Sparkles /><span><small>你的學習組合</small><b>Visual · Explorer</b></span><button>編輯</button></div>
+        <div className="se-profile"><Sparkles /><span><small>你今天的手帳搭配</small><b>視覺線索 · 探索任務</b></span><button>換一張</button></div>
       </aside>
       <section className="se-stage">
-        <div className="se-scene-title"><span>SCENE {String(lessonIndex + 1).padStart(2, "0")}</span><b>NEON RECORDING STUDIO · WEBGL</b></div>
-        <div className="se-visual" aria-label="會隨音訊反應的 3D 教練"><ShadowCoach3D active={playing || recording} /></div><Waveform active={playing || recording} />
+        <div className="se-scene-title"><span>夜讀貼紙 {String(lessonIndex + 1).padStart(2, "0")}</span><b>你的書桌 · 先聽，再跟著說</b></div>
+        <div className="se-visual" aria-label="會隨音訊反應的 3D 教練"><ShadowCoach3D active={playing || recording} onContextReady={() => setBootDone((previous) => ({ ...previous, webgl: true }))} onFirstFrame={() => setBootDone((previous) => ({ ...previous, frame: true }))} /></div><Waveform active={playing || recording} />
         <div className="se-instruction">{mode === "boss" ? `BOSS ${bossCompleted + 1}/${Math.min(5, lessons.length)} · ${phase === "listen" ? "先聽" : "完成本句"}` : phase === "listen" ? "聆聽並捕捉節奏" : phase === "shadow" ? mode === "rhythm" ? "跟著節奏錨點說一次" : "跟上節奏，複製語氣" : "不看提示，完整說一次"}</div>
         <h1 aria-live="polite">{displaySentence}</h1><p className="se-ipa">{phase === "recall" ? "回想完成後可點擊重播確認" : lesson.ipa}</p>
         <div className="se-chunks">{lesson.chunks.map((chunk, index) => <span key={chunk}><i />{phase === "recall" ? `${index + 1} / ${lesson.chunks.length}` : chunk}</span>)}</div>
         <div className="se-phases" role="group" aria-label="練習階段">{PHASES.map((item, index) => <button key={item.id} className={phase === item.id ? "active" : index < phaseIndex ? "done" : ""} onClick={() => setPhase(item.id)}><b>0{index + 1}</b> {item.label}</button>)}</div>
         <div className="se-controls"><button className="se-secondary" onClick={speak}><RotateCcw /> {mode === "recall" ? "偷看示範" : "重播"}</button>{phase === "listen" && mode !== "recall" ? <button className="se-primary" onClick={speak}><Play /> 播放示範</button> : <button className={`se-primary ${recording ? "recording" : ""}`} onClick={startRecording}>{recording ? <CircleStop /> : <Mic />}{recording ? "停止並分析" : mode === "recall" || phase === "recall" ? "開始回想錄音" : mode === "rhythm" ? "開始節奏跟讀" : "開始跟讀"}</button>}<button className="se-secondary" onClick={nextLesson}>跳過 <ChevronRight /></button></div>
-        <div className="se-coach-tip" aria-live="polite"><span>AI</span><p><b>Coach Nova</b>{message}{transcript && <em>你說：{transcript}</em>}<small>{lesson.tip}</small></p></div>
+        <div className="se-coach-tip" aria-live="polite"><span>同桌</span><p><b>朗讀學伴</b>{message}{transcript && <em>你說：{transcript}</em>}<small>{lesson.tip}</small></p></div>
       </section>
       <aside className="se-results">
-        <div className="se-score-title"><span>真實評分<strong>{totalScore}</strong></span><Gauge /></div><div className="se-metrics">{SCORE_LABELS.map((label, index) => <div key={label}><span>{label}<b>{scores[index]}</b></span><i><em style={{ width: `${scores[index]}%` }} /></i></div>)}</div>
+        <div className="se-score-title"><span>本頁朗讀印章<strong>{totalScore}</strong></span><Gauge /></div><div className="se-metrics">{SCORE_LABELS.map((label, index) => <div key={label}><span>{label}<b>{scores[index]}</b></span><i><em style={{ width: `${scores[index]}%` }} /></i></div>)}</div>
         <div className="se-session-label">{lesson.category} · {difficulty} · {lessons.length} 句</div><div className="se-lesson-list">{lessons.map((item, index) => <button key={item.id} className={lessonIndex === index ? "active" : completedIds.has(item.id) ? "done" : ""} onClick={() => chooseLesson(index)}><span>{completedIds.has(item.id) ? "✓" : index + 1}</span><p>{item.sentence}</p></button>)}</div>
-        <div className="se-recommend"><b>今日推薦 · 已完成 {dailyDone}/{dailyIds.length}</b><p><span>1</span> Explorer 暖身 · Visual 提示</p><p><span>2</span> Echo · {lesson.category}</p><p><span>3</span> 盲讀回想 · {difficulty}</p></div>
+        <div className="se-recommend"><b>今晚的小抄 · 已完成 {dailyDone}/{dailyIds.length}</b><p><span>1</span> 看圖暖聲 · 放慢呼吸</p><p><span>2</span> 跟讀貼紙 · {lesson.category}</p><p><span>3</span> 遮稿回想 · {difficulty}</p></div>
       </aside>
     </div>
     {showAnalysis && assessment && <ShadowAnalysisCard assessment={assessment} scores={scores} totalScore={totalScore} modeName={mode === "boss" ? `BOSS ROUND ${bossCompleted + 1}` : MODES.find((item) => item.id === mode)?.name ?? mode} primaryLabel={mode === "echo" ? "進入回想" : mode === "boss" ? bossCompleted + 1 < Math.min(5, lessons.length) ? "下一句挑戰" : "完成回合" : "前往下一句"} bossProgress={mode === "boss" ? `回合平均：${Math.round([...bossScores, totalScore].reduce((sum, score) => sum + score, 0) / (bossScores.length + 1))} · 已完成 ${bossCompleted + 1}/${Math.min(5, lessons.length)}` : undefined} onClose={() => setShowAnalysis(false)} onRetry={retryFromAnalysis} onContinue={continueFromAnalysis} />}
     <div className="se-mobile-nav"><button onClick={speak}><Headphones /><span>聆聽</span></button><button onClick={startRecording}><Mic /><span>跟讀</span></button><button onClick={() => selectMode("recall")}><Brain /><span>回想</span></button><button onClick={nextLesson}><ChevronRight /><span>下一句</span></button></div>
+    {!bootHidden && <ShadowBootScreen progress={bootProgress} stageLabel={currentBootStage} done={bootReady} />}
   </main>;
 }

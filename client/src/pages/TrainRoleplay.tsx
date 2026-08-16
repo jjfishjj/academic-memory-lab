@@ -3,7 +3,7 @@
  * 亮黃 = 情境/劇本設定；玫瑰粉 = 劇情演出；teal 印章 = 完成
  * 流程：選卡包 → 選劇本 → 5 個核心詞逐個觸發劇情（角色扮演演出）→ 結案回想 → 蓋章結算
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { ROLEPLAY_SCRIPTS, addTemplateStats, takeItems, type RoleplayScript } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
+import { playSfx } from "@/lib/sfx";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
@@ -50,6 +51,14 @@ export default function TrainRoleplay() {
   const [bestCombo, setBestCombo] = useState(0);
   const [hintLevel, setHintLevel] = useState(0);
   const [interlude, setInterlude] = useState(false);
+  /** 答對/答錯的即時回饋動畫：卡片抖動、浮出徽章、連擊火花 */
+  const [feedback, setFeedback] = useState<{ ok: boolean; combo: number; seq: number } | null>(null);
+  /** 選劇本時的按下回饋（卡片壓一下再進場） */
+  const [pickedScript, setPickedScript] = useState<string | null>(null);
+  /** 分支路徑改變時讓 STORY PATH 區塊閃一下，讓玩家發現走向被自己改寫了 */
+  const [pathPulse, setPathPulse] = useState(false);
+  const seqRef = useRef(0);
+  const prevEnding = useRef<StoryEnding["id"] | null>(null);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
@@ -65,9 +74,17 @@ export default function TrainRoleplay() {
   }, [works]);
 
   const startPack = (p: SubjectPack) => {
+    playSfx("pick");
     setWorks(takeItems(p.items, 5).map((item) => ({ item, recalled: null })));
     setIdx(0);
     setPhase("script");
+  };
+
+  const chooseScript = (sc: RoleplayScript) => {
+    setPickedScript(sc.id);
+    playSfx("pick");
+    // 讓卡片先完成壓下動畫，再切換場景，避免「點了就跳走」的突兀感
+    window.setTimeout(() => { setScript(sc); setPhase("play"); setPickedScript(null); }, 220);
   };
 
   const updateWork = (patch: Partial<Work>) => {
@@ -79,9 +96,10 @@ export default function TrainRoleplay() {
     setHintLevel(0);
     if (idx < works.length - 1) {
       setInterlude(true);
+      playSfx("unlock");
       window.setTimeout(() => { setIdx((value) => value + 1); setInterlude(false); }, 850);
     }
-    else { setIdx(0); setRevealed(false); setPhase("recall"); }
+    else { playSfx("reveal"); setIdx(0); setRevealed(false); setPhase("recall"); }
   };
 
   const answer = (ok: boolean) => {
@@ -90,12 +108,17 @@ export default function TrainRoleplay() {
     setCombo(c);
     setBestCombo((b) => Math.max(b, c));
     setRevealed(false);
+    seqRef.current += 1;
+    setFeedback({ ok, combo: c, seq: seqRef.current });
+    playSfx(ok ? "correct" : "miss");
+    if (ok && c >= 2) playSfx("combo", c);
     if (idx < works.length - 1) setIdx(idx + 1);
     else {
       addTemplateStats(
         [{ label: "情境編碼", value: 3 }, { label: "即時輸出", value: 2 }, { label: "故事綁定", value: 1 }],
         "roleplayRuns",
       );
+      window.setTimeout(() => playSfx("stamp"), 260);
       setPhase("result");
     }
   };
@@ -105,9 +128,31 @@ export default function TrainRoleplay() {
     setCombo(0); setBestCombo(0); setRevealed(false);
     setHintLevel(0);
     setInterlude(false);
+    setFeedback(null);
+    setPickedScript(null);
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
+
+  // 回饋徽章 900ms 後自動收起（用 seq 當 key，連續答題不會互相取消）
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  // 分支走向改變時提示玩家：閃光 + 一聲輕音
+  useEffect(() => {
+    if (phase !== "play") { prevEnding.current = ending.id; return; }
+    if (prevEnding.current && prevEnding.current !== ending.id) {
+      setPathPulse(true);
+      playSfx("hint");
+      const timer = window.setTimeout(() => setPathPulse(false), 900);
+      prevEnding.current = ending.id;
+      return () => window.clearTimeout(timer);
+    }
+    prevEnding.current = ending.id;
+  }, [ending.id, phase]);
 
   return (
     <TrainShell title="情境式劇本殺" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
@@ -130,9 +175,10 @@ export default function TrainRoleplay() {
 
           <div className="grid md:grid-cols-2 gap-6">
             {ROLEPLAY_SCRIPTS.map((sc, i) => (
-              <button key={sc.id} onClick={() => { setScript(sc); setPhase("play"); }}
-                className={`paper-card ${i % 2 === 0 ? "tilt-l2" : "tilt-r"} p-6 text-left group relative`}>
+              <button key={sc.id} onClick={() => chooseScript(sc)} disabled={pickedScript !== null}
+                className={`paper-card ${i % 2 === 0 ? "tilt-l2" : "tilt-r"} p-6 text-left group relative transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${pickedScript === sc.id ? "rp-picked" : pickedScript ? "opacity-40" : ""}`}>
                 <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
+                {pickedScript === sc.id && <span className="rp-picked-flag font-hand">開演！</span>}
                 <div className="text-4xl mb-3">{sc.emoji}</div>
                 <h3 className="font-display font-bold text-xl mb-1 group-hover:text-primary transition-colors">{sc.name}</h3>
                 <p className="text-sm mb-1"><b>你的角色：</b>{sc.role}</p>
@@ -161,7 +207,7 @@ export default function TrainRoleplay() {
             <ol className="grid grid-cols-5 gap-1">{script.scenes.map((item, sceneIndex) => <li key={item.title} className="relative text-center"><span className={`relative z-10 mx-auto grid h-8 w-8 place-items-center rounded-full border-2 text-xs font-black ${sceneIndex < idx ? "border-teal-600 bg-teal-500 text-white" : sceneIndex === idx ? "border-pink-700 bg-pink-500 text-white ring-4 ring-pink-100" : "border-stone-300 bg-[#fffaf0] text-stone-400"}`}>{sceneIndex < idx ? "✓" : sceneIndex + 1}</span><small className={`mt-2 block truncate text-[9px] ${sceneIndex === idx ? "font-bold text-pink-800" : "text-muted-foreground"}`}>{item.title}</small>{sceneIndex < 4 && <i className={`absolute left-[60%] right-[-40%] top-4 h-0.5 ${sceneIndex < idx ? "bg-teal-500" : "bg-stone-200"}`} />}</li>)}</ol>
           </nav>
 
-          {idx === 4 && <section className={`mb-6 max-w-3xl rounded-2xl border-2 p-5 ${ending.id === "perfect" ? "border-amber-300 bg-amber-50" : ending.id === "solved" ? "border-teal-300 bg-teal-50" : "border-violet-300 bg-violet-50"}`} aria-label="第五幕故事走向"><p className="text-xs font-bold tracking-widest text-muted-foreground">YOUR STORY PATH</p><h2 className="mt-1 font-display text-xl font-extrabold">{ending.icon} {ending.title}</h2><p className="mt-1 text-sm text-muted-foreground">{ending.description}</p></section>}
+          {idx === 4 && <section className={`mb-6 max-w-3xl rounded-2xl border-2 p-5 transition-all duration-300 ${pathPulse ? "rp-path-pulse" : ""} ${ending.id === "perfect" ? "border-amber-300 bg-amber-50" : ending.id === "solved" ? "border-teal-300 bg-teal-50" : "border-violet-300 bg-violet-50"}`} aria-label="第五幕故事走向" aria-live="polite"><p className="text-xs font-bold tracking-widest text-muted-foreground">YOUR STORY PATH{pathPulse && <span className="ml-2 rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-primary">走向已改寫</span>}</p><h2 className="mt-1 font-display text-xl font-extrabold">{ending.icon} {ending.title}</h2><p className="mt-1 text-sm text-muted-foreground">{ending.description}</p></section>}
 
           <section className="mb-6 max-w-3xl rounded-2xl border-2 border-pink-200 bg-white/85 p-5 shadow-sm" aria-label="本關操作說明">
             <div className="flex items-start gap-3 mb-4">
@@ -184,7 +230,7 @@ export default function TrainRoleplay() {
             <div className="mb-4 max-w-xl rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/80 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><p className="text-sm font-bold text-amber-950">💡 卡住了嗎？逐步打開提示</p><p className="text-xs text-amber-800">先自己回想；提示不影響過關，但少看一次記得更牢。</p></div>
-                {hintLevel < 2 && <Button type="button" variant="outline" onClick={() => setHintLevel((level) => { const next = level + 1; updateWork({ hintUsed: next }); return next; })} className="rounded-full border-amber-500 bg-white text-amber-900 font-bold hover:bg-amber-100"><Lightbulb className="w-4 h-4" />{hintLevel === 0 ? "顯示提示" : "再給我句型"}</Button>}
+                {hintLevel < 2 && <Button type="button" variant="outline" onClick={() => { playSfx("hint"); setHintLevel((level) => { const next = level + 1; updateWork({ hintUsed: next }); return next; }); }} className="rounded-full border-amber-500 bg-white text-amber-900 font-bold hover:bg-amber-100 active:scale-[0.97] transition-transform"><Lightbulb className="w-4 h-4" />{hintLevel === 0 ? "顯示提示" : "再給我句型"}</Button>}
               </div>
               {hintLevel >= 1 && <div className="mt-3 rounded-lg bg-yellow-200/70 p-3 text-sm text-amber-950" aria-live="polite"><b>提示 1｜詞義：</b>{current.item.hint}{current.item.extra ? ` — ${current.item.extra}` : ""}</div>}
               {hintLevel >= 2 && <div className="mt-2 rounded-lg bg-white p-3 text-sm text-pink-900" aria-live="polite"><b>提示 2｜本幕角色句型：</b>「{scene?.sentenceLead ?? "各位，我發現關鍵是"} <strong>{current.item.term}</strong>，它的意思是＿＿＿＿，所以＿＿＿＿。」</div>}
@@ -216,7 +262,23 @@ export default function TrainRoleplay() {
           </h1>
           <p className="text-muted-foreground mb-6">第 {idx + 1} / {works.length} 個核心詞 · 目前連擊 <b className="text-primary">×{combo}</b></p>
 
-          <div className="paper-card tilt-l2 p-6 max-w-2xl relative">
+          <div className={`paper-card tilt-l2 p-6 max-w-2xl relative ${feedback ? (feedback.ok ? "rp-hit" : "rp-shake") : ""}`}>
+            {feedback && (
+              <div key={feedback.seq} className="pointer-events-none absolute inset-0 z-20 grid place-items-center" role="status" aria-live="polite">
+                <div className={`rp-badge ${feedback.ok ? "is-ok" : "is-miss"}`}>
+                  <span className="rp-badge-icon">{feedback.ok ? "✅" : "🔁"}</span>
+                  <b>{feedback.ok ? "線索成立！" : "先記著，等等再來"}</b>
+                  {feedback.ok && feedback.combo >= 2 && <em>連擊 ×{feedback.combo}</em>}
+                </div>
+                {feedback.ok && feedback.combo >= 2 && (
+                  <div className="rp-sparks" aria-hidden="true">
+                    {Array.from({ length: 8 }).map((_, sparkIndex) => (
+                      <i key={sparkIndex} style={{ ["--a" as string]: `${sparkIndex * 45}deg`, ["--d" as string]: `${sparkIndex * 26}ms` }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="washi" />
             <span className="tape-corner tape-tr" />
             <p className="text-sm text-muted-foreground mb-1">你的線索：</p>
@@ -228,7 +290,7 @@ export default function TrainRoleplay() {
                 <>
                   <p className="font-display font-bold text-lg mb-1">「{current.item.term}」的意義是什麼？</p>
                   <p className="text-sm text-muted-foreground mb-4">不看備忘，像做結案陳詞一樣完整說出來。</p>
-                  <Button onClick={() => setRevealed(true)} variant="outline"
+                  <Button onClick={() => { playSfx("reveal"); setRevealed(true); }} variant="outline"
                     className="font-display font-bold rounded-full border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.97] transition-all">
                     翻開真相
                   </Button>
