@@ -20,10 +20,11 @@ interface Props {
   /** 每個步驟索引標籤的顏色 class（依模板主題色） */
   stepColor: (stepId: string) => string;
   badge?: string; // 右上角小字（例如 combo 或計數）
+  headerControl?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export default function TrainShell({ title, steps, stepIndex, stepColor, badge, children }: Props) {
+export default function TrainShell({ title, steps, stepIndex, stepColor, badge, headerControl, children }: Props) {
   const progress = (stepIndex / (steps.length - 1)) * 100;
   const { theme, toggleTheme } = useTheme();
   const [sfxOn, setSfxOn] = useState(isSfxOn);
@@ -45,6 +46,7 @@ export default function TrainShell({ title, steps, stepIndex, stepColor, badge, 
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden font-hand text-lg text-primary sm:inline">{badge ?? ""}</span>
+            {headerControl}
             <button type="button" onClick={() => toggleSfx()}
               aria-label={sfxOn ? "關閉音效提示" : "開啟音效提示"}
               title={sfxOn ? "音效：開（點一下靜音）" : "音效：靜音（點一下開啟）"}

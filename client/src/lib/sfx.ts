@@ -31,6 +31,7 @@ export function isSfxOn() {
 
 export function setSfxOn(on: boolean) {
   enabled = on;
+  if (!on) stopAmbientSoundscape();
   if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
   listeners.forEach((fn) => fn(on));
 }
@@ -44,6 +45,65 @@ export function toggleSfx() {
 export function subscribeSfx(fn: (on: boolean) => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+export type AmbientSoundscape = "night" | "clockwork" | "shore" | "auction" | "rainroom" | "kitchen" | "library" | "space";
+let ambientStop: (() => void) | null = null;
+
+function makeAmbientNoise(ac: AudioContext, destination: AudioNode, cutoff: number, gain: number) {
+  const buffer = ac.createBuffer(1, ac.sampleRate * 1.4, ac.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < data.length; index += 1) data[index] = Math.random() * 2 - 1;
+  const source = ac.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  const filter = ac.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = cutoff;
+  const amp = ac.createGain();
+  amp.gain.value = gain;
+  source.connect(filter).connect(amp).connect(destination);
+  source.start();
+  return () => { try { source.stop(); } catch { /* 已停止 */ } source.disconnect(); filter.disconnect(); amp.disconnect(); };
+}
+
+/** 低干擾環境音：不使用外部音檔，僅在使用者主動開啟且全域音效啟用時播放。 */
+export function startAmbientSoundscape(scene: AmbientSoundscape) {
+  stopAmbientSoundscape();
+  if (!enabled) return false;
+  const ac = audio();
+  if (!ac) return false;
+  const master = ac.createGain();
+  master.gain.value = 0.027;
+  master.connect(ac.destination);
+  const stops: Array<() => void> = [];
+  const addTone = (frequency: number, type: OscillatorType, level: number, detune = 0) => {
+    const oscillator = ac.createOscillator();
+    const amp = ac.createGain();
+    oscillator.type = type; oscillator.frequency.value = frequency; oscillator.detune.value = detune; amp.gain.value = level;
+    oscillator.connect(amp).connect(master); oscillator.start();
+    stops.push(() => { try { oscillator.stop(); } catch { /* 已停止 */ } oscillator.disconnect(); amp.disconnect(); });
+  };
+  const addPulse = (frequency: number, everyMs: number) => {
+    const timer = window.setInterval(() => { if (enabled) tone({ freq: frequency, dur: 0.11, type: "sine", gain: 0.028 }); }, everyMs);
+    stops.push(() => window.clearInterval(timer));
+  };
+  switch (scene) {
+    case "night": addTone(92, "sine", 0.32); stops.push(makeAmbientNoise(ac, master, 530, 0.08)); break;
+    case "clockwork": addTone(110, "triangle", 0.23); addPulse(880, 3600); break;
+    case "shore": addTone(67, "sine", 0.25); stops.push(makeAmbientNoise(ac, master, 780, 0.16)); break;
+    case "auction": addTone(146.8, "triangle", 0.2); addPulse(392, 5300); break;
+    case "rainroom": addTone(82.4, "sine", 0.22); stops.push(makeAmbientNoise(ac, master, 1200, 0.2)); break;
+    case "kitchen": addTone(98, "triangle", 0.18); addPulse(659.25, 4400); break;
+    case "library": addTone(130.8, "sine", 0.16); stops.push(makeAmbientNoise(ac, master, 390, 0.055)); break;
+    case "space": addTone(55, "sine", 0.42); addTone(110, "sine", 0.08, 7); addPulse(740, 4700); break;
+  }
+  ambientStop = () => { stops.forEach((stop) => stop()); master.disconnect(); ambientStop = null; };
+  return true;
+}
+
+export function stopAmbientSoundscape() {
+  ambientStop?.();
 }
 
 interface ToneOptions {

@@ -6,7 +6,7 @@
 import { Link } from "wouter";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, MapPin, Heart, EyeOff, Stamp, Clock, Sparkles, TrainFront, Atom, BrainCircuit, AudioLines } from "lucide-react";
+import { ArrowRight, MapPin, Heart, EyeOff, Stamp, Clock, Sparkles, TrainFront, Atom, BrainCircuit, AudioLines, ChartNoAxesCombined } from "lucide-react";
 import { loadStats, type GymStats } from "@/lib/gameData";
 
 const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
@@ -92,6 +92,11 @@ export default function Home() {
             <Link href="/shadow-echo">
               <Button size="lg" variant="outline" className="font-display font-bold text-base rounded-full px-7 h-12 border-[#84f65f]/70 bg-[#0b1822] text-[#b7ff8b] hover:bg-[#102531] hover:text-white">
                 <AudioLines className="w-5 h-5" /> Shadow Echo 3D 跟讀
+              </Button>
+            </Link>
+            <Link href="/progress">
+              <Button size="lg" variant="outline" className="font-display font-bold text-base rounded-full px-7 h-12 border-primary/40 bg-[#fff8df]">
+                <ChartNoAxesCombined className="w-5 h-5" /> 跨週訓練週記
               </Button>
             </Link>
           </div>

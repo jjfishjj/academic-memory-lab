@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Drama, ArrowRight, EyeOff, HelpCircle, Lightbulb, RotateCcw, Home as HomeIcon } from "lucide-react";
+import { Drama, ArrowRight, EyeOff, HelpCircle, Lightbulb, RotateCcw, Home as HomeIcon, Volume2, VolumeX } from "lucide-react";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { ROLEPLAY_SCRIPTS, addTemplateStats, takeItems, type RoleplayScript } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
-import { playSfx } from "@/lib/sfx";
+import { playSfx, startAmbientSoundscape, stopAmbientSoundscape } from "@/lib/sfx";
+import { recordTrainingSession } from "@/lib/unifiedStats";
+import { collectRoleplayStamp, loadRoleplayStamps, type RoleplayStamp } from "@/lib/roleplayStamps";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
@@ -57,6 +59,9 @@ export default function TrainRoleplay() {
   const [pickedScript, setPickedScript] = useState<string | null>(null);
   /** 分支路徑改變時讓 STORY PATH 區塊閃一下，讓玩家發現走向被自己改寫了 */
   const [pathPulse, setPathPulse] = useState(false);
+  /** 音景需由使用者明確開啟，避免干擾專注與瀏覽器自動播放限制。 */
+  const [ambientOn, setAmbientOn] = useState(false);
+  const [stamps, setStamps] = useState<RoleplayStamp[]>(() => loadRoleplayStamps());
   const seqRef = useRef(0);
   const prevEnding = useRef<StoryEnding["id"] | null>(null);
 
@@ -118,6 +123,9 @@ export default function TrainRoleplay() {
         [{ label: "情境編碼", value: 3 }, { label: "即時輸出", value: 2 }, { label: "故事綁定", value: 1 }],
         "roleplayRuns",
       );
+      const correct = works.filter((work) => work.recalled).length + (ok ? 1 : 0);
+      recordTrainingSession({ module: "roleplay", label: "情境式分支劇本", score: Math.round((correct / Math.max(1, works.length)) * 100), abilities: { "情境編碼": 3, "即時輸出": 2, "故事綁定": 1 } });
+      if (script) setStamps(collectRoleplayStamp({ scriptId: script.id, scriptName: script.name, emoji: script.emoji, label: script.stampLabel, ending: ending.id, score: Math.round((correct / Math.max(1, works.length)) * 100), collectedAt: new Date().toISOString() }));
       window.setTimeout(() => playSfx("stamp"), 260);
       setPhase("result");
     }
@@ -133,6 +141,12 @@ export default function TrainRoleplay() {
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
+
+  const toggleAmbient = () => {
+    if (ambientOn) { stopAmbientSoundscape(); setAmbientOn(false); return; }
+    if (!script) return;
+    setAmbientOn(startAmbientSoundscape(script.soundscape));
+  };
 
   // 回饋徽章 900ms 後自動收起（用 seq 當 key，連續答題不會互相取消）
   useEffect(() => {
@@ -154,8 +168,15 @@ export default function TrainRoleplay() {
     prevEnding.current = ending.id;
   }, [ending.id, phase]);
 
+  useEffect(() => {
+    if (phase === "play" && script && ambientOn) startAmbientSoundscape(script.soundscape);
+    else stopAmbientSoundscape();
+    return () => stopAmbientSoundscape();
+  }, [ambientOn, phase, script?.id]);
+
   return (
-    <TrainShell title="情境式劇本殺" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}>
+    <TrainShell title="情境式劇本殺" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}
+      headerControl={<button type="button" onClick={toggleAmbient} disabled={!script} aria-label={ambientOn ? "關閉劇本音景" : "開啟劇本音景"} title={!script ? "選擇劇本後可開啟音景" : ambientOn ? "音景：開（點一下關閉）" : "音景：關（點一下開啟）"} className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/70 text-foreground transition-all hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{ambientOn ? <Volume2 className="h-4 w-4 text-pink-600" /> : <VolumeX className="h-4 w-4 opacity-60" />}</button>}>
       {phase === "pack" && (
         <div>
           <p className="font-hand text-2xl text-primary mb-1">step 1 — gather the clues 🎭</p>
@@ -199,6 +220,7 @@ export default function TrainRoleplay() {
           <h1 className="font-display font-extrabold text-3xl mb-2 flex items-center gap-2">
             {script.emoji} 第 {idx + 1} 幕 · {scene?.title ?? "核心詞觸發"}
           </h1>
+          {ambientOn && <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-xs font-bold text-pink-800"><Volume2 className="h-3.5 w-3.5" /> 音景播放中 · {script.name}</p>}
           <p className="text-muted-foreground mb-1">{script.role} · 核心詞 {idx + 1} / {works.length}</p>
           <p className="doodle-note text-xl mb-4">你不是在猜答案：請把核心詞的意思演成一句角色台詞 →</p>
 
@@ -329,6 +351,17 @@ export default function TrainRoleplay() {
           </p>
 
           <div className={`paper-card mb-8 p-6 ${ending.id === "perfect" ? "bg-amber-50" : ending.id === "solved" ? "bg-teal-50" : "bg-violet-50"}`}><span className="text-4xl">{ending.icon}</span><h2 className="mt-2 font-display text-2xl font-extrabold">{ending.title}</h2><p className="mt-2 text-muted-foreground">{ending.description}</p></div>
+
+          <section className="mb-10 text-left paper-card p-5 relative overflow-hidden">
+            <span className="tape-corner tape-tl" />
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="font-hand text-2xl text-pink-600">scenario stamp book</p><h2 className="font-display text-xl font-extrabold">劇本章戳收藏 · {stamps.length} / {ROLEPLAY_SCRIPTS.length}</h2></div><p className="text-xs text-muted-foreground">同一劇本會保留更佳結局</p></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {ROLEPLAY_SCRIPTS.map((item) => {
+                const stamp = stamps.find((saved) => saved.scriptId === item.id);
+                return <div key={item.id} className={`border-2 border-dashed p-3 text-center transition-transform ${stamp ? "border-teal-500 bg-teal-50 rotate-[-1deg]" : "border-stone-200 bg-stone-50 text-stone-400"}`}><span className="block text-2xl">{item.emoji}</span><b className="mt-1 block text-xs">{stamp ? item.stampLabel : "尚未取得"}</b><small className="mt-1 block text-[10px]">{stamp ? `${stamp.ending === "perfect" ? "完美" : stamp.ending === "solved" ? "結案" : "反轉"} · ${stamp.score}%` : item.name}</small></div>;
+              })}
+            </div>
+          </section>
 
           <div className="grid grid-cols-3 gap-4 mb-10">
             {[

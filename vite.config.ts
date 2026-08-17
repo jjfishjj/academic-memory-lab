@@ -225,6 +225,18 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Shadow Echo 本身已由 React.lazy 載入；把 3D 引擎拆成獨立快取區塊，
+        // 讓一般記憶訓練不必下載 three.js，並讓再次開啟語音頁時可重用快取。
+        manualChunks(id) {
+          if (id.includes("node_modules/three/") || id.includes("node_modules/@react-three/")) {
+            return "three-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 3000,
