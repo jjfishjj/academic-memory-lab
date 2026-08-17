@@ -4,8 +4,9 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ArrowRight, CalendarDays, ChartNoAxesCombined, ClipboardCheck, Sparkles, Target } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, ChartNoAxesCombined, ClipboardCheck, Download, Sparkles, Target } from "lucide-react";
 import { ABILITIES, loadUnifiedReport, type UnifiedReport, WEAKNESS_ACTIONS } from "@/lib/unifiedStats";
+import { downloadShadowEchoWeeklyPdf } from "@/lib/shadowEchoWeeklyPdf";
 
 const moduleNames = { "dual-card": "雙卡任務", mnemonic: "口訣", roleplay: "劇本殺", gesture: "手勢", memgenius: "MemGenius", "shadow-echo": "Shadow Echo" } as const;
 const colorByIndex = ["#0f766e", "#d9879f", "#d9a441", "#6d8f83", "#5c7c9f", "#b26757"];
@@ -28,6 +29,9 @@ export default function UnifiedProgressPage() {
   const practiced = ABILITIES.filter((ability) => report.abilityTotals[ability] > 0).sort((a, b) => report.abilityTotals[b] - report.abilityTotals[a]);
   const recommendation = report.weakest ? WEAKNESS_ACTIONS[report.weakest] : null;
   const sourceText = useMemo(() => report.sources.map((source) => moduleNames[source]).join("、"), [report.sources]);
+  const shadowSessions = useMemo(() => report.sessions.filter((session) => session.module === "shadow-echo"), [report.sessions]);
+  const [exporting, setExporting] = useState(false);
+  const exportShadowWeekly = async () => { setExporting(true); try { await downloadShadowEchoWeeklyPdf(report); } finally { setExporting(false); } };
 
   return <main className="ud-page">
     <header className="ud-topbar"><Link href="/" className="ud-brand"><span>MD</span><b>記憶手帳社 MemoDesk</b><small>跨週練習週記</small></Link><Link href="/" className="ud-back"><ArrowLeft /> 回到書桌</Link></header>
@@ -44,6 +48,10 @@ export default function UnifiedProgressPage() {
 
       <aside className="ud-action-card">
         <p><Target /> 待補強索引</p>{recommendation ? <><h2>{report.weakest}</h2><strong>{recommendation.title}</strong><span>{recommendation.detail}</span><Link href={recommendation.route}>安排下一輪 <ArrowRight /></Link></> : <><h2>開始你的第一頁</h2><span>完成任一訓練後，這裡會依你的真實紀錄指出下一個值得補強的能力。</span><Link href="/game">開啟雙卡任務 <ArrowRight /></Link></>}
+      </aside>
+
+      <aside className="ud-pdf-card">
+        <p><Download /> Shadow Echo 週記</p><h2>夜自習朗讀存檔</h2><span>目前收錄 <b>{shadowSessions.length}</b> 次實際完成的跟讀紀錄；下載後可保存、列印或帶去複盤。</span><button type="button" onClick={exportShadowWeekly} disabled={exporting}>{exporting ? "正在排版…" : "下載 PDF 週記"} <Download /></button><small>PDF 只含本機 Shadow Echo 實際完成時間與評分。</small>
       </aside>
 
       <section className="ud-ability-card">

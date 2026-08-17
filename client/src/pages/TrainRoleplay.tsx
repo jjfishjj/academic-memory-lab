@@ -7,16 +7,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Drama, ArrowRight, EyeOff, HelpCircle, Lightbulb, RotateCcw, Home as HomeIcon, Volume2, VolumeX } from "lucide-react";
+import { Drama, ArrowRight, EyeOff, HelpCircle, Lightbulb, RotateCcw, Home as HomeIcon, Volume2, VolumeX, Award, Sparkles, PenLine, WandSparkles } from "lucide-react";
 import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { ROLEPLAY_SCRIPTS, addTemplateStats, takeItems, type RoleplayScript } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
 import { playSfx, startAmbientSoundscape, stopAmbientSoundscape } from "@/lib/sfx";
 import { recordTrainingSession } from "@/lib/unifiedStats";
-import { collectRoleplayStamp, loadRoleplayStamps, type RoleplayStamp } from "@/lib/roleplayStamps";
+import { assessRoleplayStamp, collectRoleplayStamp, getStampRarity, loadRoleplayStamps, newlyUnlockedMilestones, ROLEPLAY_MILESTONES, STAMP_RARITY_META, type RoleplayMilestone, type RoleplayStamp } from "@/lib/roleplayStamps";
+import { createCustomRoleplay, loadCustomRoleplays, saveCustomRoleplay, type CustomRoleplay } from "@/lib/customRoleplay";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
+const RARITY_CARD_STYLE = {
+  common: "border-stone-400 bg-stone-50",
+  rare: "border-teal-500 bg-teal-50",
+  epic: "border-pink-500 bg-pink-50",
+  legendary: "border-amber-500 bg-amber-50",
+} as const;
 
 type Phase = "pack" | "script" | "play" | "recall" | "result";
 
@@ -62,12 +69,21 @@ export default function TrainRoleplay() {
   /** 音景需由使用者明確開啟，避免干擾專注與瀏覽器自動播放限制。 */
   const [ambientOn, setAmbientOn] = useState(false);
   const [stamps, setStamps] = useState<RoleplayStamp[]>(() => loadRoleplayStamps());
+  /** 僅在跨過真實收藏門檻時顯示，不用假資料預覽解鎖。 */
+  const [milestone, setMilestone] = useState<RoleplayMilestone | null>(null);
+  const [customScripts, setCustomScripts] = useState<CustomRoleplay[]>(() => loadCustomRoleplays());
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customTitle, setCustomTitle] = useState("");
+  const [customScene, setCustomScene] = useState("");
+  const [customLines, setCustomLines] = useState("");
+  const [customError, setCustomError] = useState("");
   const seqRef = useRef(0);
   const prevEnding = useRef<StoryEnding["id"] | null>(null);
 
   const stepIndex = STEPS.findIndex((s) => s.id === phase);
   const current = works[idx];
   const scene = script?.scenes[idx];
+  const availableScripts = useMemo(() => [...customScripts.map((entry) => entry.script), ...ROLEPLAY_SCRIPTS], [customScripts]);
 
   const ending = useMemo<StoryEnding>(() => {
     const evidence = works.slice(0, 4);
@@ -83,6 +99,22 @@ export default function TrainRoleplay() {
     setWorks(takeItems(p.items, 5).map((item) => ({ item, recalled: null })));
     setIdx(0);
     setPhase("script");
+  };
+
+  const createScript = () => {
+    try {
+      const entry = createCustomRoleplay({ scene: customScene, title: customTitle, coreLines: customLines });
+      const next = saveCustomRoleplay(entry);
+      setCustomScripts(next);
+      setWorks(entry.items.map((item) => ({ item, recalled: null })));
+      setCustomError("");
+      setCustomOpen(false);
+      setPhase("script");
+      playSfx("unlock");
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : "目前無法產生自訂劇本，請重新檢查輸入。");
+      playSfx("miss");
+    }
   };
 
   const chooseScript = (sc: RoleplayScript) => {
@@ -125,7 +157,16 @@ export default function TrainRoleplay() {
       );
       const correct = works.filter((work) => work.recalled).length + (ok ? 1 : 0);
       recordTrainingSession({ module: "roleplay", label: "情境式分支劇本", score: Math.round((correct / Math.max(1, works.length)) * 100), abilities: { "情境編碼": 3, "即時輸出": 2, "故事綁定": 1 } });
-      if (script) setStamps(collectRoleplayStamp({ scriptId: script.id, scriptName: script.name, emoji: script.emoji, label: script.stampLabel, ending: ending.id, score: Math.round((correct / Math.max(1, works.length)) * 100), collectedAt: new Date().toISOString() }));
+      if (script) {
+        const score = Math.round((correct / Math.max(1, works.length)) * 100);
+        const hintCount = works.reduce((sum, work) => sum + (work.hintUsed ?? 0), 0);
+        const assessment = assessRoleplayStamp({ ending: ending.id, score, bestCombo, hintCount });
+        const previous = loadRoleplayStamps();
+        const next = collectRoleplayStamp({ scriptId: script.id, scriptName: script.name, emoji: script.emoji, label: script.stampLabel, ending: ending.id, score, collectedAt: new Date().toISOString(), rarity: assessment.rarity, condition: assessment.condition, bestCombo, hintCount });
+        setStamps(next);
+        const unlocked = newlyUnlockedMilestones(previous, next);
+        if (unlocked[0]) { window.setTimeout(() => { setMilestone(unlocked[0]); playSfx("unlock"); }, 720); }
+      }
       window.setTimeout(() => playSfx("stamp"), 260);
       setPhase("result");
     }
@@ -138,6 +179,7 @@ export default function TrainRoleplay() {
     setInterlude(false);
     setFeedback(null);
     setPickedScript(null);
+    setMilestone(null);
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
@@ -178,11 +220,16 @@ export default function TrainRoleplay() {
     <TrainShell title="情境式劇本殺" steps={STEPS} stepIndex={stepIndex} stepColor={stepColor} badge={`combo ×${combo}`}
       headerControl={<button type="button" onClick={toggleAmbient} disabled={!script} aria-label={ambientOn ? "關閉劇本音景" : "開啟劇本音景"} title={!script ? "選擇劇本後可開啟音景" : ambientOn ? "音景：開（點一下關閉）" : "音景：關（點一下開啟）"} className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/70 text-foreground transition-all hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{ambientOn ? <Volume2 className="h-4 w-4 text-pink-600" /> : <VolumeX className="h-4 w-4 opacity-60" />}</button>}>
       {phase === "pack" && (
-        <div>
-          <p className="font-hand text-2xl text-primary mb-1">step 1 — gather the clues 🎭</p>
+        <div className="rp-case-desk">
+          <div className="rp-case-intro"><span className="rp-clip-mark" aria-hidden="true" /><div><p className="font-hand text-xl text-pink-600 mb-0">記憶手帳社 MemoDesk · 社團夜間開案</p><span className="rp-case-tag">情境劇本活動</span></div><span className="club-seal rp-case-seal">社團<br />案卷<br />認證</span></div>
+          <p className="font-hand text-2xl text-primary mb-1">step 1 — gather the clues</p>
           <h1 className="font-display font-extrabold text-3xl mb-2">挑一包知識點，當今晚的核心詞</h1>
-          <p className="text-muted-foreground mb-6">會取卡包的前 5 個知識點做成 5 個核心詞——每個都會在劇情裡觸發一段戲。</p>
-          <PackPicker onPick={startPack} note="入戲越深，記得越牢 ✎" />
+          <p className="text-muted-foreground mb-6">從案卷中挑五份證物；每個核心詞都會在劇情裡觸發一段戲。</p>
+          <PackPicker onPick={startPack} note="把線索收好，再讓它們在故事裡現身 ✎" variant="casefile" />
+          <section className="rp-writer-desk mt-8 max-w-4xl border-2 border-dashed border-pink-300 bg-[#fff9ef] p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-hand text-xl text-pink-600">build your own case</p><h2 className="font-display text-xl font-extrabold">用自己的核心詞，生成專屬五幕劇本</h2><p className="mt-1 text-sm text-muted-foreground">不必先選卡包；輸入一個場景與五組「核心詞｜一句意思」，就能保存在此裝置並直接開演。</p></div><Button type="button" variant="outline" onClick={() => setCustomOpen((open) => !open)} className="rounded-full border-pink-400 bg-white font-display font-bold text-pink-800"><PenLine className="h-4 w-4" />{customOpen ? "收起編劇台" : "打開編劇台"}</Button></div>
+            {customOpen && <div className="mt-5 grid gap-4 border-t border-dashed border-pink-200 pt-5"><label className="grid gap-1 text-sm font-bold text-pink-950">劇本名稱（選填）<input value={customTitle} onChange={(event) => setCustomTitle(event.target.value)} maxLength={28} placeholder="例：期中考前的圖書館密令" className="h-10 border border-pink-200 bg-white px-3 font-normal outline-none focus:border-pink-500" /></label><label className="grid gap-1 text-sm font-bold text-pink-950">故事場景</label><Textarea value={customScene} onChange={(event) => setCustomScene(event.target.value)} maxLength={120} placeholder="例：午夜的校史館，五張遺失的研究筆記散落在展櫃之間。" className="min-h-20 border-pink-200 bg-white" /><label className="grid gap-1 text-sm font-bold text-pink-950">五組核心詞與意思<small className="font-normal text-muted-foreground">每行一組，格式：核心詞｜一句意思；必須剛好五行。</small></label><Textarea value={customLines} onChange={(event) => setCustomLines(event.target.value)} placeholder={"光合作用｜植物利用光能製造養分\n葉綠體｜進行光合作用的細胞構造\n…"} className="min-h-40 border-pink-200 bg-white" />{customError && <p className="border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700" role="alert">{customError}</p>}<div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">你輸入的內容只會保存於這個瀏覽器，不會送往外部服務。</p><Button type="button" onClick={createScript} className="rounded-full bg-pink-600 font-display font-bold hover:bg-pink-700"><WandSparkles className="h-4 w-4" />生成我的五幕劇本</Button></div></div>}
+          </section>
         </div>
       )}
 
@@ -195,12 +242,12 @@ export default function TrainRoleplay() {
           <p className="text-muted-foreground mb-6">你的 {works.length} 個核心詞：{works.map((w) => `「${w.item.term}」`).join("、")}</p>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {ROLEPLAY_SCRIPTS.map((sc, i) => (
+            {availableScripts.map((sc, i) => (
               <button key={sc.id} onClick={() => chooseScript(sc)} disabled={pickedScript !== null}
                 className={`paper-card ${i % 2 === 0 ? "tilt-l2" : "tilt-r"} p-6 text-left group relative transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${pickedScript === sc.id ? "rp-picked" : pickedScript ? "opacity-40" : ""}`}>
                 <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
                 {pickedScript === sc.id && <span className="rp-picked-flag font-hand">開演！</span>}
-                <div className="text-4xl mb-3">{sc.emoji}</div>
+                <div className="rp-file-mark mb-3">{sc.id.startsWith("custom-") ? "自" : "案"}</div>
                 <h3 className="font-display font-bold text-xl mb-1 group-hover:text-primary transition-colors">{sc.name}</h3>
                 <p className="text-sm mb-1"><b>你的角色：</b>{sc.role}</p>
                 <p className="text-sm text-muted-foreground mb-2">{sc.setting}</p>
@@ -340,6 +387,7 @@ export default function TrainRoleplay() {
 
       {phase === "result" && script && (
         <div className="text-center max-w-2xl mx-auto">
+          {milestone && <div className="fixed inset-0 z-50 grid place-items-center bg-[#213832]/45 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="roleplay-milestone-title"><section className="rp-milestone-pop relative w-full max-w-sm border-2 border-amber-300 bg-[#fffaf0] p-7 text-center shadow-2xl"><span className="absolute -top-4 left-1/2 -translate-x-1/2 rotate-[-3deg] bg-[#FDE68A] px-4 py-1 font-hand text-lg text-amber-950 shadow-sm">achievement unlocked!</span><div className="mt-3 text-6xl">{milestone.emoji}</div><p className="mt-3 font-hand text-2xl text-pink-600">MemoDesk 社團章</p><h2 id="roleplay-milestone-title" className="font-display text-2xl font-extrabold text-primary">{milestone.name}</h2><p className="mt-2 text-sm text-muted-foreground">{milestone.description}</p><p className="mt-4 inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800"><Award className="h-3.5 w-3.5" /> 已蒐集 {stamps.length} 枚劇本章戳</p><Button type="button" onClick={() => setMilestone(null)} className="mt-6 w-full rounded-full font-display font-bold">收進我的手帳</Button></section></div>}
           <div className="relative inline-block mb-4">
             <img src={STAMP} alt="任務完成印章" className="w-28 h-28 mx-auto stamp-in" />
             <span className="club-seal absolute -right-20 top-4 hidden sm:inline-flex">記憶<br/>手帳社<br/>認證</span>
@@ -354,13 +402,16 @@ export default function TrainRoleplay() {
 
           <section className="mb-10 text-left paper-card p-5 relative overflow-hidden">
             <span className="tape-corner tape-tl" />
-            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="font-hand text-2xl text-pink-600">scenario stamp book</p><h2 className="font-display text-xl font-extrabold">劇本章戳收藏 · {stamps.length} / {ROLEPLAY_SCRIPTS.length}</h2></div><p className="text-xs text-muted-foreground">同一劇本會保留更佳結局</p></div>
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="font-hand text-2xl text-pink-600">scenario stamp book</p><h2 className="font-display text-xl font-extrabold">劇本章戳收藏 · {stamps.length} / {availableScripts.length}</h2></div><p className="text-xs text-muted-foreground">同一劇本會保留更佳結局與稀有度</p></div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {ROLEPLAY_SCRIPTS.map((item) => {
+              {availableScripts.map((item) => {
                 const stamp = stamps.find((saved) => saved.scriptId === item.id);
-                return <div key={item.id} className={`border-2 border-dashed p-3 text-center transition-transform ${stamp ? "border-teal-500 bg-teal-50 rotate-[-1deg]" : "border-stone-200 bg-stone-50 text-stone-400"}`}><span className="block text-2xl">{item.emoji}</span><b className="mt-1 block text-xs">{stamp ? item.stampLabel : "尚未取得"}</b><small className="mt-1 block text-[10px]">{stamp ? `${stamp.ending === "perfect" ? "完美" : stamp.ending === "solved" ? "結案" : "反轉"} · ${stamp.score}%` : item.name}</small></div>;
+                const rarity = stamp ? getStampRarity(stamp) : "common";
+                const rarityMeta = STAMP_RARITY_META[rarity];
+                return <div key={item.id} className={`border-2 border-dashed p-3 text-center transition-transform ${stamp ? `${RARITY_CARD_STYLE[rarity]} rotate-[-1deg]` : "border-stone-200 bg-stone-50 text-stone-400"}`}><span className="block text-2xl">{item.emoji}</span><b className="mt-1 block text-xs">{stamp ? item.stampLabel : "尚未取得"}</b><span className={`mx-auto mt-1 inline-flex items-center gap-1 border px-1.5 py-0.5 text-[9px] font-black ${stamp ? "bg-white/80" : "bg-stone-100"}`}>{stamp ? <Sparkles className="h-3 w-3" /> : "○"}{stamp ? rarityMeta.label : "完成條件"}</span><small className="mt-1 block text-[10px] leading-4">{stamp ? `${stamp.ending === "perfect" ? "完美" : stamp.ending === "solved" ? "結案" : "反轉"} · ${stamp.score}%` : "完成五幕並進行結案回想"}</small>{stamp && <small className="mt-1 block text-[9px] text-muted-foreground">{stamp.condition ?? rarityMeta.description}</small>}</div>;
               })}
             </div>
+            <div className="mt-5 grid gap-2 border-t border-dashed border-stone-200 pt-4 sm:grid-cols-2"><p className="sm:col-span-2 text-xs font-bold text-primary">里程碑索引 · 蒐集不同劇本章戳即可解鎖</p>{ROLEPLAY_MILESTONES.map((item) => { const unlocked = stamps.length >= item.count; return <div key={item.id} className={`flex items-center gap-2 px-2 py-1.5 text-xs ${unlocked ? "bg-amber-50 text-amber-950" : "text-stone-400"}`}><span>{item.emoji}</span><span><b>{item.name}</b> · {item.description}</span><em className="ml-auto shrink-0 font-bold not-italic">{unlocked ? "已解鎖" : `${item.count} 枚`}</em></div>; })}</div>
           </section>
 
           <div className="grid grid-cols-3 gap-4 mb-10">
