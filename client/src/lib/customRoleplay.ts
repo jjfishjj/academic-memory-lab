@@ -8,6 +8,14 @@ import { markLocalDataUpdated } from "./supabase";
 
 export type CustomRoleplay = { script: RoleplayScript; items: KnowledgeItem[]; createdAt: string };
 
+export type RoleplayTemplate = { id: string; name: string; note: string; title: string; scene: string; coreLines: string; label: string };
+
+export const ROLEPLAY_TEMPLATE_LIBRARY: RoleplayTemplate[] = [
+  { id: "research", name: "研究室遺失筆記", label: "學術推理", note: "適合定義、理論與研究方法", title: "研究室的遺失筆記", scene: "深夜研究室的白板上留下五張缺角便條，實驗紀錄必須在晨會前復原。", coreLines: "變項｜會影響研究結果、可被觀察或控制的因素\n假設｜在研究前提出、可被檢驗的預測\n樣本｜從母群體抽出、用來研究的一部分對象\n相關｜兩個現象一起變動，但不必然表示因果\n結論｜根據證據整理出的合理判斷" },
+  { id: "timeline", name: "校史館時序任務", label: "事件脈絡", note: "適合歷史事件、流程與時間線", title: "校史館的時序密令", scene: "校史館的展櫃被打亂，五件文物必須依照事件脈絡重新說明才能開啟密室。", coreLines: "背景｜事件發生前已存在的條件與脈絡\n轉折｜讓情勢開始改變的重要時刻\n決策｜在限制下選擇一個行動方向\n影響｜事件對人、制度或環境造成的後續結果\n反思｜回看事件並找出可帶走的理解" },
+  { id: "language", name: "國際交換生求救訊", label: "語言任務", note: "適合單字、片語與表達練習", title: "交換生的求救訊", scene: "深夜校園收到五封不同語言的求救訊，你必須用正確詞義回覆並協助對方找到集合點。", coreLines: "clarify｜把模糊的內容說得更清楚\nreliable｜值得信賴且能持續依靠的\nnegotiate｜透過討論協調出雙方可接受的安排\nconsequence｜一個行動或事件後產生的結果\nperspective｜看待事情的角度或立場" },
+];
+
 const STORAGE_KEY = "memodesk-custom-roleplays-v1";
 const SCENE_BEATS = [
   { title: "封存便條出現", objective: "以自己的話解釋第一個核心詞，確認任務的起點", lead: "我先確認，這個詞在本案中代表" },
@@ -66,4 +74,34 @@ export function saveCustomRoleplay(entry: CustomRoleplay): CustomRoleplay[] {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   markLocalDataUpdated();
   return next;
+}
+
+export type RoleplayExportBundle = { version: 1; type: "memodesk-custom-roleplay"; exportedAt: string; entry: CustomRoleplay };
+
+export function serializeCustomRoleplay(entry: CustomRoleplay): string {
+  const bundle: RoleplayExportBundle = { version: 1, type: "memodesk-custom-roleplay", exportedAt: new Date().toISOString(), entry };
+  return JSON.stringify(bundle, null, 2);
+}
+
+function isRoleplayScript(value: unknown): value is RoleplayScript {
+  if (!value || typeof value !== "object") return false;
+  const script = value as Partial<RoleplayScript>;
+  return typeof script.name === "string" && typeof script.emoji === "string" && typeof script.setting === "string" && typeof script.mission === "string" && typeof script.role === "string" && typeof script.stampLabel === "string" && Array.isArray(script.scenes) && script.scenes.length === 5 && script.scenes.every((scene) => Boolean(scene?.title && scene?.setting && scene?.objective && scene?.sentenceLead));
+}
+
+function isKnowledgeItems(value: unknown): value is KnowledgeItem[] {
+  return Array.isArray(value) && value.length === 5 && value.every((item) => Boolean(item?.term && item?.hint));
+}
+
+/** 將分享檔還原為新案卷；重新給予 ID，故絕不覆寫讀者既有劇本。 */
+export function parseImportedCustomRoleplay(raw: string): CustomRoleplay {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("這不是有效的 JSON 劇本檔。 "); }
+  if (!parsed || typeof parsed !== "object") throw new Error("劇本檔格式不完整。 ");
+  const bundle = parsed as Partial<RoleplayExportBundle>;
+  if (bundle.version !== 1 || bundle.type !== "memodesk-custom-roleplay" || !bundle.entry || !isRoleplayScript(bundle.entry.script) || !isKnowledgeItems(bundle.entry.items)) throw new Error("這份檔案不是 MemoDesk 可匯入的五幕劇本。 ");
+  const importedAt = Date.now();
+  const script: RoleplayScript = { ...bundle.entry.script, id: `custom-${importedAt}`, name: `${bundle.entry.script.name.slice(0, 23)}（好友案卷）`, stampLabel: bundle.entry.script.stampLabel || "好友挑戰章" };
+  const items = bundle.entry.items.map((item, index) => ({ ...item, id: `custom-import-${importedAt}-${index}`, term: item.term.slice(0, 80), hint: item.hint.slice(0, 240), extra: item.extra?.slice(0, 180) }));
+  return { script, items, createdAt: new Date().toISOString() };
 }
