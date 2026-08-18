@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, MapPin, Heart, EyeOff, RotateCcw, Home as HomeIcon, Plus, Trash2, Sparkles } from "lucide-react";
 import {
   SUBJECT_PACKS, CAMPUS_SCENES, EMOTIONS,
+  createSessionItems,
   loadStats, saveStats,
   loadCustomPacks, deleteCustomPack,
   type SubjectPack, type CampusScene, type Emotion, type KnowledgeItem,
@@ -59,7 +60,8 @@ export default function Game() {
 
   const startPack = (p: SubjectPack) => {
     setPack(p);
-    setWorks(p.items.map((item) => ({ item, recalled: null })));
+    const sessionItems = createSessionItems(p.items, p.sessionSize ?? 6);
+    setWorks(sessionItems.map((item) => ({ item, recalled: null })));
     setIdx(0);
     setPhase("hook");
   };
@@ -212,6 +214,7 @@ export default function Game() {
                       <div className="text-4xl mb-3">{p.emoji}</div>
                       <h3 className="font-display font-bold text-xl mb-1">{p.name}</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
+                      <p className="text-xs font-bold text-primary mb-3">題庫 {p.items.length} 題 · 本回合隨機抽 {Math.min(p.sessionSize ?? 6, p.items.length)} 題</p>
                       <button onClick={() => startPack(p)} className="doodle-note text-xl inline-flex items-center gap-1 hover:text-primary transition-colors">
                         開始任務 <ArrowRight className="w-4 h-4" />
                       </button>
@@ -230,6 +233,7 @@ export default function Game() {
                   <div className="text-4xl mb-3">{p.emoji}</div>
                   <h3 className="font-display font-bold text-xl mb-1 group-hover:text-primary transition-colors">{p.name}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
+                  <p className="text-xs font-bold text-primary mb-3">題庫 {p.items.length} 題 · 本回合隨機抽 {Math.min(p.sessionSize ?? 6, p.items.length)} 題</p>
                   <span className="doodle-note text-xl inline-flex items-center gap-1">就決定是你了 <ArrowRight className="w-4 h-4" /></span>
                 </button>
               ))}
