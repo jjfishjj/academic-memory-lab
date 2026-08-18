@@ -2,15 +2,50 @@ import { Activity, AudioLines, ChevronRight, Flame, Mic, Pause, Play, RotateCcw,
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-const lessons = [
-  { text: "The city comes alive after dark.", phonetic: "/ðə ˈsɪti kʌmz əˈlaɪv ˈæftər dɑːrk/", chunks: ["The city", "comes alive", "after dark"], tip: "重音放在 CITY、ALIVE、DARK。", seconds: 3.1 },
-  { text: "Could you show me the nearest station?", phonetic: "/kʊd juː ʃoʊ miː ðə ˈnɪrəst ˈsteɪʃən/", chunks: ["Could you show me", "the nearest station"], tip: "Could you 連讀，語氣自然上揚。", seconds: 3.5 },
-  { text: "I'd like a coffee with oat milk, please.", phonetic: "/aɪd laɪk ə ˈkɔːfi wɪð oʊt mɪlk pliːz/", chunks: ["I'd like a coffee", "with oat milk", "please"], tip: "弱化 a 與 with，讓句子更流暢。", seconds: 3.9 },
-  { text: "The next flight leaves at seven thirty.", phonetic: "/ðə nekst flaɪt liːvz æt ˈsevən ˈθɜːrti/", chunks: ["The next flight", "leaves at", "seven thirty"], tip: "把 leaves at 當成一個節奏單位。", seconds: 3.6 },
-  { text: "Every small step makes a real difference.", phonetic: "/ˈevri smɔːl step meɪks ə riːl ˈdɪfrəns/", chunks: ["Every small step", "makes", "a real difference"], tip: "清楚落在 DIFFERENCE 的第一音節。", seconds: 3.7 },
-];
-
-const languages = ["English", "日本語", "한국어", "Deutsch", "Français", "Español", "中文"];
+type Difficulty = "Beginner" | "Intermediate" | "Advanced";
+type Language = "English" | "日本語" | "한국어" | "Deutsch" | "Français" | "Español" | "中文";
+type Lesson = { text: string; phonetic: string; chunks: string[]; tip: string; seconds: number; scene: string };
+const languages: Language[] = ["English", "日本語", "한국어", "Deutsch", "Français", "Español", "中文"];
+const difficulties: Difficulty[] = ["Beginner", "Intermediate", "Advanced"];
+const voiceLocales: Record<Language, string> = { English: "en-US", 日本語: "ja-JP", 한국어: "ko-KR", Deutsch: "de-DE", Français: "fr-FR", Español: "es-ES", 中文: "zh-TW" };
+const L = (text: string, phonetic: string, chunks: string[], tip: string, seconds: number, scene: string): Lesson => ({ text, phonetic, chunks, tip, seconds, scene });
+const lessonBanks: Record<Language, Record<Difficulty, Lesson[]>> = {
+  English: {
+    Beginner: [L("Good morning, how are you?", "/ɡʊd ˈmɔːrnɪŋ, haʊ ɑːr juː/", ["Good morning", "how are you"], "Good 與 morning 連起來，句尾自然上揚。", 2.7, "MORNING CAFÉ"), L("I would like some water, please.", "/aɪ wʊd laɪk sʌm ˈwɔːtər pliːz/", ["I would like", "some water", "please"], "弱化 would，清楚說出 WATER。", 3.1, "CAFÉ COUNTER")],
+    Intermediate: [L("The city comes alive after dark.", "/ðə ˈsɪti kʌmz əˈlaɪv ˈæftər dɑːrk/", ["The city", "comes alive", "after dark"], "重音放在 CITY、ALIVE、DARK。", 3.1, "NEON CITY"), L("Could you show me the nearest station?", "/kʊd juː ʃoʊ miː ðə ˈnɪrəst ˈsteɪʃən/", ["Could you show me", "the nearest station"], "Could you 連讀，語氣自然上揚。", 3.5, "METRO GATE")],
+    Advanced: [L("Although the forecast looked uncertain, we decided to continue.", "/ɔːlˈðoʊ ðə ˈfɔːrkæst lʊkt ʌnˈsɜːrtən, wi dɪˈsaɪdɪd tə kənˈtɪnjuː/", ["Although the forecast", "looked uncertain", "we decided to continue"], "用三段意群保持長句的呼吸與對比。", 6.2, "WEATHER DECK"), L("What impressed me most was how calmly she handled the situation.", "/wʌt ɪmˈprest miː moʊst wəz haʊ ˈkɑːmli ʃiː ˈhændəld ðə ˌsɪtʃuˈeɪʃən/", ["What impressed me most", "was how calmly", "she handled the situation"], "重讀 IMPRESSED、CALMLY、SITUATION。", 6.0, "TEAM BRIEFING")],
+  },
+  日本語: {
+    Beginner: [L("おはようございます。", "ohayō gozaimasu", ["おはよう", "ございます"], "「よう」拉長一拍，句尾保持柔和。", 2.2, "TOKYO MORNING"), L("駅はどこですか。", "eki wa doko desu ka", ["駅は", "どこですか"], "助詞「は」讀作 wa，疑問句尾微微上揚。", 2.1, "STATION STREET")],
+    Intermediate: [L("おすすめの料理を教えてください。", "osusume no ryōri o oshiete kudasai", ["おすすめの料理を", "教えてください"], "「料理」的長音要完整，ください連續說。", 4.0, "IZAKAYA TABLE"), L("明日の午後なら時間があります。", "ashita no gogo nara jikan ga arimasu", ["明日の午後なら", "時間があります"], "在 nara 後做輕微停頓。", 4.1, "CALENDAR ROOM")],
+    Advanced: [L("環境を守るために、私たちができることから始めましょう。", "kankyō o mamoru tame ni, watashitachi ga dekiru koto kara hajimemashō", ["環境を守るために", "私たちができることから", "始めましょう"], "長音 kankyō、hajimemashō 要維持節奏。", 7.0, "GREEN FORUM"), L("予想していたよりも、結果はずっと興味深いものでした。", "yosō shite ita yori mo, kekka wa zutto kyōmibukai mono deshita", ["予想していたよりも", "結果はずっと", "興味深いものでした"], "強調 zutto，避免句尾速度過快。", 6.5, "RESEARCH LAB")],
+  },
+  한국어: {
+    Beginner: [L("안녕하세요, 반갑습니다.", "annyeonghaseyo, bangapseumnida", ["안녕하세요", "반갑습니다"], "兩個句尾都平穩收音，不要吞掉습니다。", 2.8, "SEOUL LOBBY"), L("물 한 잔 주세요.", "mul han jan juseyo", ["물 한 잔", "주세요"], "한 잔連續說，주세요語氣柔和。", 2.1, "CAFÉ COUNTER")],
+    Intermediate: [L("지하철역까지 어떻게 가요?", "jihacheol-yeokkkaji eotteoke gayo", ["지하철역까지", "어떻게 가요"], "역까지的緊音要清楚，句尾上揚。", 3.8, "SUBWAY MAP") ,L("주말에는 친구들과 영화를 봤어요.", "jumareneun chingudeulgwa yeonghwareul bwasseoyo", ["주말에는", "친구들과", "영화를 봤어요"], "分成三個節奏組，重點落在 영화。", 4.3, "CINEMA HALL")],
+    Advanced: [L("새로운 관점에서 문제를 바라보는 것이 중요합니다.", "saeroun gwanjeomeseo munjereul baraboneun geosi jungyohamnida", ["새로운 관점에서", "문제를 바라보는 것이", "중요합니다"], "長句保持三段均勻氣流，清楚收尾。", 6.5, "IDEA STUDIO"), L("예상치 못한 변화에도 유연하게 대응할 수 있어야 합니다.", "yesangchi mothan byeonhwaedo yuyeonhage daeeunghal su isseoya hamnida", ["예상치 못한 변화에도", "유연하게 대응할 수", "있어야 합니다"], "對比 변화 與 대응，避免中段含糊。", 7.0, "CONTROL ROOM")],
+  },
+  Deutsch: {
+    Beginner: [L("Guten Morgen, wie geht es Ihnen?", "/ˈɡuːtn̩ ˈmɔʁɡn̩ viː ɡeːt ɛs ˈiːnən/", ["Guten Morgen", "wie geht es Ihnen"], "長音 guten、geht 要穩定。", 3.0, "BERLIN CAFÉ"), L("Ich hätte gern einen Kaffee.", "/ɪç ˈhɛtə ɡɛʁn ˈaɪnən ˈkafeː/", ["Ich hätte gern", "einen Kaffee"], "ich 的摩擦音輕柔，Kaffee 重讀後音節。", 3.0, "COFFEE BAR")],
+    Intermediate: [L("Können Sie mir den Weg zum Bahnhof zeigen?", "/ˈkœnən ziː miːɐ̯ deːn veːk tsʊm ˈbaːnhoːf ˈtsaɪɡn̩/", ["Können Sie mir", "den Weg zum Bahnhof", "zeigen"], "Bahnhof 第一音節重讀，Weg 保持長音。", 4.5, "CITY MAP") ,L("Am Wochenende besuchen wir unsere Freunde.", "/am ˈvoːxn̩ˌɛndə bəˈzuːxn̩ viːɐ̯ ˈʊnzəʁə ˈfʁɔɪndə/", ["Am Wochenende", "besuchen wir", "unsere Freunde"], "句中動詞 besuchen 清楚重讀。", 4.2, "WEEKEND TRAIN")],
+    Advanced: [L("Obwohl die Aufgabe anspruchsvoll war, fanden wir gemeinsam eine Lösung.", "/ˈoːpvoːl diː ˈaʊfɡaːbə ˈanʃpʁʊxsfɔl vaːɐ̯ ˈfandn̩ viːɐ̯ ɡəˈmaɪnzaːm ˈaɪnə ˈløːzʊŋ/", ["Obwohl die Aufgabe", "anspruchsvoll war", "fanden wir gemeinsam eine Lösung"], "從屬句後停頓，Lösung 長音要完整。", 7.0, "PROJECT ROOM"), L("Eine nachhaltige Entwicklung erfordert langfristiges Denken und entschlossenes Handeln.", "/ˈaɪnə ˈnaːxhaltɪɡə ɛntˈvɪklʊŋ ɛɐ̯ˈfɔʁdɐt ˈlaŋfʁɪstɪɡəs ˈdɛŋkn̩ ʊnt ɛntˈʃlɔsnəs ˈhandln̩/", ["Eine nachhaltige Entwicklung", "erfordert langfristiges Denken", "und entschlossenes Handeln"], "三個複合詞各自保留主要重音。", 8.0, "FUTURE FORUM")],
+  },
+  Français: {
+    Beginner: [L("Bonjour, comment allez-vous ?", "/bɔ̃ʒuʁ kɔmɑ̃ tale vu/", ["Bonjour", "comment allez-vous"], "注意連音 comment_allez，鼻音保持共鳴。", 2.7, "PARIS CAFÉ"), L("Je voudrais un verre d'eau, s'il vous plaît.", "/ʒə vudʁɛ ɛ̃ vɛʁ do sil vu plɛ/", ["Je voudrais", "un verre d'eau", "s'il vous plaît"], "verre d'eau 連讀，句尾自然下降。", 3.7, "BISTRO TABLE")],
+    Intermediate: [L("Pourriez-vous me recommander un bon restaurant ?", "/puʁje vu mə ʁəkɔmɑ̃de ɛ̃ bɔ̃ ʁɛstoʁɑ̃/", ["Pourriez-vous me recommander", "un bon restaurant"], "推薦 recommander 的尾音不要吞掉。", 4.5, "HOTEL DESK"), L("Nous avons passé une excellente journée au bord de la mer.", "/nu zavɔ̃ pase yn ɛksɛlɑ̃t ʒuʁne o bɔʁ də la mɛʁ/", ["Nous avons passé", "une excellente journée", "au bord de la mer"], "Nous_avons 連音，journée 節奏延長。", 5.0, "SEASIDE WALK")],
+    Advanced: [L("Même si les circonstances étaient difficiles, elle a gardé une attitude positive.", "/mɛm si le siʁkɔ̃stɑ̃s etɛ difisil ɛl a ɡaʁde yn atityd pozitiv/", ["Même si les circonstances", "étaient difficiles", "elle a gardé une attitude positive"], "在 difficiles 後輕停，正面語氣落在 positive。", 7.0, "TEAM FORUM"), L("Il est essentiel que chacun puisse exprimer librement son point de vue.", "/il ɛt esɑ̃sjɛl kə ʃakɛ̃ pɥis ɛkspʁime libʁəmɑ̃ sɔ̃ pwɛ̃ də vy/", ["Il est essentiel", "que chacun puisse exprimer", "librement son point de vue"], "注意 est_essentiel 連音及 puisse 的圓唇音。", 7.2, "DEBATE HALL")],
+  },
+  Español: {
+    Beginner: [L("Buenos días, ¿cómo estás?", "/ˈbwenos ˈdi.as ˈkomo esˈtas/", ["Buenos días", "cómo estás"], "días 保留兩個音節，問句尾上揚。", 2.5, "MADRID MORNING"), L("Quisiera una taza de café, por favor.", "/kiˈsjeɾa ˈuna ˈtasa ðe kaˈfe poɾ faˈβoɾ/", ["Quisiera", "una taza de café", "por favor"], "重音落在 siera、fé、vor。", 3.6, "CAFÉ PLAZA")],
+    Intermediate: [L("¿Podrías decirme dónde está la estación más cercana?", "/poˈðɾi.as ðeˈsiɾme ˈðonde esˈta la estaˈsjon mas seɾˈkana/", ["Podrías decirme", "dónde está la estación", "más cercana"], "dónde está 自然連接，estación 重讀尾段。", 5.0, "METRO PLAZA"), L("Este fin de semana vamos a visitar a nuestros amigos.", "/ˈeste fin ðe seˈmana ˈβamos a βisiˈtaɾ a ˈnwestɾos aˈmiɣos/", ["Este fin de semana", "vamos a visitar", "a nuestros amigos"], "vamos_a 與 visitar_a 都要順暢連讀。", 5.1, "WEEKEND ROAD")],
+    Advanced: [L("Aunque el proceso fue más complicado de lo esperado, aprendimos mucho.", "/ˈaunke el pɾoˈseso fue mas kompliˈkaðo ðe lo espeˈɾaðo apɾenˈðimos ˈmutʃo/", ["Aunque el proceso", "fue más complicado de lo esperado", "aprendimos mucho"], "長句維持母音清楚，末段語氣有結論感。", 7.0, "LEARNING LAB"), L("La capacidad de adaptarse rápidamente es fundamental en un mundo cambiante.", "/la kapaθiˈðað ðe aðapˈtaɾse rapiðaˈmente es funda menˈtal en un ˈmundo kamˈbjante/", ["La capacidad de adaptarse", "rápidamente es fundamental", "en un mundo cambiante"], "重讀 capacidad、fundamental、cambiante。", 7.4, "GLOBAL FORUM")],
+  },
+  中文: {
+    Beginner: [L("早安，今天過得好嗎？", "zǎo ān, jīn tiān guò de hǎo ma", ["早安", "今天過得", "好嗎"], "第三聲「好」先降再升，問句尾自然上揚。", 2.5, "TAIPEI MORNING"), L("請給我一杯水，謝謝。", "qǐng gěi wǒ yì bēi shuǐ, xiè xie", ["請給我", "一杯水", "謝謝"], "「一」在杯前讀第四聲，謝謝第二字輕聲。", 2.8, "TEA HOUSE")],
+    Intermediate: [L("請問最近的捷運站怎麼走？", "qǐng wèn zuì jìn de jié yùn zhàn zěn me zǒu", ["請問", "最近的捷運站", "怎麼走"], "捷運站三字節奏均勻，問句尾上揚。", 3.8, "MRT EXIT"), L("這個週末我想和朋友一起看電影。", "zhè ge zhōu mò wǒ xiǎng hé péng yǒu yì qǐ kàn diàn yǐng", ["這個週末", "我想和朋友", "一起看電影"], "朋友的「友」輕讀，重點落在看電影。", 4.4, "CINEMA STREET")],
+    Advanced: [L("即使計畫臨時改變，我們仍然能夠冷靜地找到解決方法。", "jí shǐ jì huà lín shí gǎi biàn, wǒ men réng rán néng gòu lěng jìng de zhǎo dào jiě jué fāng fǎ", ["即使計畫臨時改變", "我們仍然能夠冷靜地", "找到解決方法"], "以三個意群控制呼吸，凸顯仍然與解決方法。", 7.2, "STRATEGY ROOM"), L("真正有效的溝通，不只是清楚表達，也包含耐心傾聽。", "zhēn zhèng yǒu xiào de gōu tōng, bù zhǐ shì qīng chǔ biǎo dá, yě bāo hán nài xīn qīng tīng", ["真正有效的溝通", "不只是清楚表達", "也包含耐心傾聽"], "兩個逗點都短停，結尾重讀耐心傾聽。", 7.0, "COMMUNICATION LAB")],
+  },
+};
 const modes = ["Echo Mode", "Rhythm Mode", "Blind Recall", "Boss Round"];
 const varks = ["Visual", "Auditory", "Read / Write", "Kinesthetic"];
 const talents = ["Explorer", "Architect", "Melodist", "Narrator", "Connector", "Analyst", "Performer", "Visionary"];
@@ -29,16 +64,17 @@ function SoundStage({ active, level }: { active: boolean; level: number }) {
 
 export default function ShadowEchoLab() {
   const [index, setIndex] = useState(0); const [phase, setPhase] = useState(0); const [playing, setPlaying] = useState(false);
-  const [mode, setMode] = useState(modes[0]); const [difficulty, setDifficulty] = useState("Intermediate"); const [speed, setSpeed] = useState("Normal");
-  const [language, setLanguage] = useState("English"); const [vark, setVark] = useState("Visual"); const [talent, setTalent] = useState("Explorer"); const [setup, setSetup] = useState(false);
+  const [mode, setMode] = useState(modes[0]); const [difficulty, setDifficulty] = useState<Difficulty>("Intermediate"); const [speed, setSpeed] = useState("Normal");
+  const [language, setLanguage] = useState<Language>("English"); const [vark, setVark] = useState("Visual"); const [talent, setTalent] = useState("Explorer"); const [setup, setSetup] = useState(false);
   const [scores, setScores] = useState<Scores>({ rhythm: 0, stress: 0, flow: 0, recall: 0 }); const [streak, setStreak] = useState(7);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle"); const [countdown, setCountdown] = useState(3); const [recordedUrl, setRecordedUrl] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0); const [voiceLevel, setVoiceLevel] = useState(0); const [feedback, setFeedback] = useState("播放示範後，按下麥克風開始跟讀。"); const [micError, setMicError] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null); const streamRef = useRef<MediaStream | null>(null); const chunksRef = useRef<Blob[]>([]); const levelsRef = useRef<number[]>([]);
   const startedAtRef = useRef(0); const meterRef = useRef<number | null>(null); const stopTimerRef = useRef<number | null>(null);
-  const lesson = lessons[index];
+  const lessons = lessonBanks[language][difficulty];
+  const lesson = lessons[index % lessons.length];
   const average = Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / 4);
-  const daily = useMemo(() => [`${talent} 暖身 · ${vark} 提示`, `${mode.replace(" Mode", "")} · 城市情境`, `盲讀回想 · ${difficulty} 速度`], [talent, vark, mode, difficulty]);
+  const daily = useMemo(() => [`${language} ${difficulty} 暖身`, `${talent} · ${vark} 提示`, `${mode.replace(" Mode", "")} · ${lesson.scene}`], [language, difficulty, talent, vark, mode, lesson.scene]);
 
   const cleanupStream = () => {
     if (meterRef.current) window.clearInterval(meterRef.current); if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
@@ -52,7 +88,7 @@ export default function ShadowEchoLab() {
   const speak = () => {
     if (!("speechSynthesis" in window)) { setFeedback("此瀏覽器不支援語音示範。"); return; }
     speechSynthesis.cancel(); setPlaying(true); setFeedback("仔細聽重音與句尾節奏。");
-    const utterance = new SpeechSynthesisUtterance(lesson.text); utterance.lang = "en-US"; utterance.rate = speed === "Slow" ? .75 : speed === "Fast" ? 1.2 : .95;
+    const utterance = new SpeechSynthesisUtterance(lesson.text); utterance.lang = voiceLocales[language]; utterance.rate = speed === "Slow" ? .75 : speed === "Fast" ? 1.2 : .95;
     utterance.onend = () => { setPlaying(false); if (phase === 0) setPhase(1); setFeedback("輪到你了：按下麥克風，倒數後開始說。"); }; speechSynthesis.speak(utterance);
   };
   const stopRecording = () => { if (recorderRef.current?.state === "recording") recorderRef.current.stop(); };
@@ -84,17 +120,22 @@ export default function ShadowEchoLab() {
     setStreak(value => value + 1); setIndex(value => (value + 1) % lessons.length); setPhase(0); resetRecording(); setFeedback("新句子已準備好，先聽示範。");
   };
 
+  const changeLessonBank = (nextLanguage: Language, nextDifficulty: Difficulty) => {
+    speechSynthesis.cancel(); setPlaying(false); setLanguage(nextLanguage); setDifficulty(nextDifficulty); setIndex(0); setPhase(0); setScores({ rhythm: 0, stress: 0, flow: 0, recall: 0 }); resetRecording(); setFeedback(`已切換到 ${nextLanguage} · ${nextDifficulty}，先聽第一句示範。`);
+  };
+  const maskText = (text: string) => text.replace(/[\p{L}\p{N}]/gu, "•");
+
   const primaryAction = recordingState === "recording" ? stopRecording : phase === 0 ? speak : beginRecording;
   const primaryLabel = recordingState === "countdown" ? `準備 ${countdown}` : recordingState === "recording" ? "停止錄音" : phase === 0 ? "播放示範" : recordedUrl ? "重新錄音" : "開始錄音";
 
   return <main className="shadow-app">
-    <header className="shadow-topbar"><div className="shadow-brand"><span><AudioLines /></span><div><b>SHADOW ECHO</b><small>LANGUAGE LAB</small></div></div><div className="mission-progress"><span>今日任務</span><div><i style={{ width: `${((index * 3 + phase + 1) / 15) * 100}%` }} /></div><b>{index * 3 + phase + 1}/15</b></div><div className="top-actions"><button className="streak-pill"><Flame /> {streak} 天連勝</button><button className="round-icon" aria-label="個人化設定" onClick={() => setSetup(true)}><Settings2 /></button></div></header>
+    <header className="shadow-topbar"><div className="shadow-brand"><span><AudioLines /></span><div><b>SHADOW ECHO</b><small>LANGUAGE LAB</small></div></div><div className="mission-progress"><span>{language} · {difficulty}</span><div><i style={{ width: `${((index * 3 + phase + 1) / (lessons.length * 3)) * 100}%` }} /></div><b>{index * 3 + phase + 1}/{lessons.length * 3}</b></div><div className="top-actions"><button className="streak-pill"><Flame /> {streak} 天連勝</button><button className="round-icon" aria-label="個人化設定" onClick={() => setSetup(true)}><Settings2 /></button></div></header>
     <section className="shadow-shell">
-      <aside className="control-rail"><label>語言<select value={language} onChange={e => setLanguage(e.target.value)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><div><span className="rail-label">遊戲模式</span>{modes.map((item, i) => <button key={item} onClick={() => setMode(item)} className={mode === item ? "active" : ""}><i>{["◉", "♫", "◐", "◆"][i]}</i><span>{item}<small>{["逐句跟讀", "掌握重音節奏", "遮稿複述", "連續五句挑戰"][i]}</small></span></button>)}</div><label>難度<select value={difficulty} onChange={e => setDifficulty(e.target.value)}><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></label><label>速度<div className="segmented">{["Slow", "Normal", "Fast"].map(x => <button type="button" className={speed === x ? "on" : ""} onClick={() => setSpeed(x)} key={x}>{x}</button>)}</div></label><div className="personal-card"><Sparkles /><span><small>你的學習組合</small><b>{vark} · {talent}</b></span><button onClick={() => setSetup(true)}>編輯</button></div></aside>
+      <aside className="control-rail"><label>語言<select value={language} onChange={e => changeLessonBank(e.target.value as Language, difficulty)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><div><span className="rail-label">遊戲模式</span>{modes.map((item, i) => <button key={item} onClick={() => setMode(item)} className={mode === item ? "active" : ""}><i>{["◉", "♫", "◐", "◆"][i]}</i><span>{item}<small>{["逐句跟讀", "掌握重音節奏", "遮稿複述", "連續五句挑戰"][i]}</small></span></button>)}</div><label>難度<select value={difficulty} onChange={e => changeLessonBank(language, e.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select></label><label>速度<div className="segmented">{["Slow", "Normal", "Fast"].map(x => <button type="button" className={speed === x ? "on" : ""} onClick={() => setSpeed(x)} key={x}>{x}</button>)}</div></label><div className="personal-card"><Sparkles /><span><small>你的學習組合</small><b>{vark} · {talent}</b></span><button onClick={() => setSetup(true)}>編輯</button></div></aside>
       <section className="game-stage">
-        <div className="scene-label"><span>SCENE 01</span><b>NEON RECORDING STUDIO</b></div><SoundStage active={playing || recordingState === "recording"} level={voiceLevel} />
+        <div className="scene-label"><span>LESSON {String(index + 1).padStart(2, "0")} · {language.toUpperCase()}</span><b>{lesson.scene}</b></div><SoundStage active={playing || recordingState === "recording"} level={voiceLevel} />
         {recordingState === "countdown" && <div className="record-countdown" role="status"><small>GET READY</small><b>{countdown}</b></div>}
-        <div className="floating-caption"><small>{phase === 0 ? "聆聽並捕捉節奏" : phase === 1 ? "在一秒內開始跟讀" : "遮稿回想 · 相信節奏"}</small><h1 className={phase === 2 ? "masked" : ""}>{phase === 2 ? lesson.text.replace(/[A-Za-z]/g, "•") : lesson.text}</h1>{(vark === "Read / Write" || phase === 0) && <p>{lesson.phonetic}</p>}<div className="beat-line">{lesson.chunks.map((chunk, i) => <span key={chunk}><i className={i === 1 ? "stress" : ""} />{phase === 2 ? `節奏 ${i + 1}` : chunk}</span>)}</div></div>
+        <div className="floating-caption"><small>{phase === 0 ? "聆聽並捕捉節奏" : phase === 1 ? "在一秒內開始跟讀" : "遮稿回想 · 相信節奏"}</small><h1 className={phase === 2 ? "masked" : ""}>{phase === 2 ? maskText(lesson.text) : lesson.text}</h1>{(vark === "Read / Write" || phase === 0) && <p>{lesson.phonetic}</p>}<div className="beat-line">{lesson.chunks.map((chunk, i) => <span key={chunk}><i className={i === 1 ? "stress" : ""} />{phase === 2 ? `節奏 ${i + 1}` : chunk}</span>)}</div></div>
         <div className="round-tabs">{["01 聆聽", "02 跟讀", "03 回想"].map((x, i) => <span className={phase === i ? "current" : phase > i ? "done" : ""} key={x}>{phase > i ? "✓ " : ""}{x}</span>)}</div>
         <div className="recording-panel"><div className={`record-status ${recordingState}`}><i />{recordingState === "recording" ? `錄音中 ${recordingSeconds.toFixed(1)}s` : recordedUrl ? `已錄製 ${recordingSeconds.toFixed(1)}s` : "等待錄音"}</div>{recordedUrl && <audio controls src={recordedUrl} aria-label="你的跟讀錄音" />}{micError && <p className="mic-error">{micError}</p>}<p>{feedback}</p></div>
         <div className="transport"><button className="secondary-control" onClick={speak}><Volume2 /> 重播</button><button disabled={recordingState === "countdown"} className={`main-control ${playing || recordingState === "recording" ? "playing" : ""}`} onClick={primaryAction}>{recordingState === "recording" ? <Square /> : playing ? <Pause /> : phase === 0 ? <Play /> : <Mic />}<span>{primaryLabel}</span></button>{recordedUrl ? <button className="secondary-control" onClick={resetRecording}><RotateCcw /> 重錄</button> : <button className="secondary-control" onClick={nextPhase}>跳過 <ChevronRight /></button>}</div>
