@@ -15,6 +15,8 @@ import AlkaliRoute from "./pages/AlkaliRoute";
 import HalogenRoute from "./pages/HalogenRoute";
 import GroupComparison from "./pages/GroupComparison";
 import NobleGasRoute from "./pages/NobleGasRoute";
+import ThreeTowerComparison from "./pages/ThreeTowerComparison";
+import ReviewCenter from "./pages/ReviewCenter";
 import ShadowEchoLab from "./pages/ShadowEchoLab";
 import PhoneticMagic from "./pages/PhoneticMagic";
 
@@ -32,6 +34,8 @@ function Router() {
         <Route path={"/halogen"} component={HalogenRoute} />
         <Route path={"/compare-groups"} component={GroupComparison} />
         <Route path={"/noble-gases"} component={NobleGasRoute} />
+        <Route path={"/three-towers"} component={ThreeTowerComparison} />
+        <Route path={"/review"} component={ReviewCenter} />
         <Route path={"/original"} component={Home} />
         <Route path={"/game"} component={Game} />
         <Route path={"/train/mnemonic"} component={TrainMnemonic} />
