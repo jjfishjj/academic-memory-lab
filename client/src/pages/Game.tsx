@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, MapPin, Heart, EyeOff, RotateCcw, Home as HomeIcon, Plus, Trash2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Heart, EyeOff, RotateCcw, Home as HomeIcon, Plus, Trash2, Sparkles, Lightbulb, RefreshCw } from "lucide-react";
 import {
   SUBJECT_PACKS, CAMPUS_SCENES, EMOTIONS,
   createSessionItems,
@@ -41,6 +41,21 @@ const PHASE_STEPS: { id: Phase; label: string }[] = [
   { id: "result", label: "蓋章結算" },
 ];
 
+const ASSOCIATION_TEMPLATES = [
+  (term: string, hint: string, scene: string, spot: string) =>
+    `我走到${scene}的「${spot}」，突然看到一個巨大的「${term}」跳出來，不停大喊「${hint}！」，聲音大到整個場景都在震動。`,
+  (term: string, hint: string, scene: string, spot: string) =>
+    `${scene}的「${spot}」突然變成一台誇張的機器，只要碰到「${term}」，就會噴出寫著「${hint}」的彩色紙片，堆得比我還高。`,
+  (term: string, hint: string, scene: string, spot: string) =>
+    `我把「${term}」想成一個搞笑角色，躲在${scene}的「${spot}」後面；它每探出頭，就用奇怪的動作演出「${hint}」。`,
+  (term: string, hint: string, scene: string, spot: string) =>
+    `${scene}的「${spot}」上貼著一張會發光的「${term}」貼紙；我一靠近，貼紙就變成「${hint}」的巨大畫面，還伴隨警報聲。`,
+];
+
+function createAssociationSuggestion(item: KnowledgeItem, scene: CampusScene, spot: string, variant: number) {
+  return ASSOCIATION_TEMPLATES[variant % ASSOCIATION_TEMPLATES.length](item.term, item.hint, scene.name, spot);
+}
+
 export default function Game() {
   const [phase, setPhase] = useState<Phase>("pack");
   const [pack, setPack] = useState<SubjectPack | null>(null);
@@ -54,6 +69,7 @@ export default function Game() {
   const [revealed, setRevealed] = useState(false); // 回想階段是否已翻開
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [associationVariant, setAssociationVariant] = useState(0);
 
   const phaseIndex = PHASE_STEPS.findIndex((p) => p.id === phase);
   const progress = ((phaseIndex) / (PHASE_STEPS.length - 1)) * 100;
@@ -74,6 +90,7 @@ export default function Game() {
 
   const nextItemOr = (nextPhase: Phase) => {
     setCustomSpot("");
+    setAssociationVariant(0);
     if (idx < works.length - 1) {
       setIdx(idx + 1);
     } else {
@@ -126,6 +143,14 @@ export default function Game() {
     const n = customSceneName.trim();
     if (!n) return;
     setScene({ id: `custom-${Date.now()}`, name: n, emoji: "⭐", spots: [] });
+  };
+
+  const suggestAssociation = () => {
+    if (!current || !scene) return;
+    const spot = current.spot || scene.spots[0] || scene.name;
+    const suggestion = createAssociationSuggestion(current.item, scene, spot, associationVariant);
+    updateWork({ spot, hookNote: suggestion });
+    setAssociationVariant((value) => value + 1);
   };
 
   const correctCount = useMemo(() => works.filter((w) => w.recalled).length, [works]);
@@ -324,6 +349,14 @@ export default function Game() {
                     placeholder={`例：${current.spot || scene.spots[0] || scene.name}上貼著一張寫著「${current.item.term}」的紙條，每次經過都會看到…`}
                     className="bg-white/80 border-amber-300 min-h-20"
                   />
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+                    <button type="button" onClick={suggestAssociation}
+                      className="inline-flex items-center gap-2 rounded-full border-2 border-amber-400 bg-white/75 px-4 py-2 text-sm font-bold text-amber-900 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white active:scale-[0.97]">
+                      {current.hookNote ? <RefreshCw className="w-4 h-4" /> : <Lightbulb className="w-4 h-4" />}
+                      {current.hookNote ? "換一個聯想" : "沒靈感？給我一個聯想"}
+                    </button>
+                    <span className="text-xs text-amber-800/80">會直接填入上方，之後仍可自由修改</span>
+                  </div>
                   <div className="flex justify-end mt-4">
                     <Button onClick={() => nextItemOr("story")} disabled={!current.spot}
                       className="font-display font-bold rounded-full bg-amber-600 hover:bg-amber-700 active:scale-[0.97] transition-transform">
