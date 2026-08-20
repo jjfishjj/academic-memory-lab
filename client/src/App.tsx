@@ -14,6 +14,7 @@ import PeriodicTutorial from "./pages/PeriodicTutorial";
 import AlkaliRoute from "./pages/AlkaliRoute";
 import HalogenRoute from "./pages/HalogenRoute";
 import GroupComparison from "./pages/GroupComparison";
+import NobleGasRoute from "./pages/NobleGasRoute";
 import ShadowEchoLab from "./pages/ShadowEchoLab";
 import PhoneticMagic from "./pages/PhoneticMagic";
 
@@ -30,6 +31,7 @@ function Router() {
         <Route path={"/alkali"} component={AlkaliRoute} />
         <Route path={"/halogen"} component={HalogenRoute} />
         <Route path={"/compare-groups"} component={GroupComparison} />
+        <Route path={"/noble-gases"} component={NobleGasRoute} />
         <Route path={"/original"} component={Home} />
         <Route path={"/game"} component={Game} />
         <Route path={"/train/mnemonic"} component={TrainMnemonic} />
