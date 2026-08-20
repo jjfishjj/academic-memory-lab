@@ -19,6 +19,7 @@ import ThreeTowerComparison from "./pages/ThreeTowerComparison";
 import ReviewCenter from "./pages/ReviewCenter";
 import ShadowEchoLab from "./pages/ShadowEchoLab";
 import PhoneticMagic from "./pages/PhoneticMagic";
+import ElementStoryStudio from "./pages/ElementStoryStudio";
 
 
 function Router() {
@@ -36,6 +37,7 @@ function Router() {
         <Route path={"/noble-gases"} component={NobleGasRoute} />
         <Route path={"/three-towers"} component={ThreeTowerComparison} />
         <Route path={"/review"} component={ReviewCenter} />
+        <Route path={"/story-builder"} component={ElementStoryStudio} />
         <Route path={"/original"} component={Home} />
         <Route path={"/game"} component={Game} />
         <Route path={"/train/mnemonic"} component={TrainMnemonic} />

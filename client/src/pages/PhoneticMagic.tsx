@@ -92,6 +92,7 @@ export default function PhoneticMagic() {
         <h1>聽見單字，<br/><em>看見記憶。</em></h1>
         <p>把陌生發音變成一幕熟悉的中文小劇場。翻開卡牌，讓諧音、畫面與聲音一起住進腦海。</p>
         <div className="hero-notes"><span>🎧 真人語音</span><span>🧠 諧音聯想</span><span>✨ 3D 翻卡</span></div>
+        <button className="element-story-entry" onClick={()=>location.href=`${import.meta.env.BASE_URL}story-builder`}><span>⚗️</span><div><b>元素故事工作室</b><small>選擇 3～6 個元素，建立連續記憶故事</small></div><ArrowRight/></button>
       </section>
       <section className="mode-panel"><div className="panel-top"><span>選擇今日訓練</span><small>3 MODES</small></div>
         {Object.entries(MODES).map(([key, item], i) => { const Icon = item.icon; return <button className={`mode-row ${item.accent}`} key={key} onClick={() => chooseMode(key as Mode)}>
