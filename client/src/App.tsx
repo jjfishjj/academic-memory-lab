@@ -57,6 +57,7 @@ function Router() {
           />
           <Route path={"/train/mrt/sync"} component={CloudSyncPage} />
           <Route path={"/train/mrt/mnemonics"} component={MrtMnemonicLibrary} />
+          <Route path={"/explore"} component={ElementGame} />
           <Route path={"/train/elements"} component={ElementGame} />
           <Route path={"/memgenius"} component={MemGeniusArcade} />
           <Route path={"/shadow-echo"} component={ShadowEcho} />
