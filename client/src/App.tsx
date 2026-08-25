@@ -24,6 +24,8 @@ const ElementGame = lazy(() => import("./pages/ElementGame"));
 const MemGeniusArcade = lazy(() => import("./pages/MemGeniusArcade"));
 const ShadowEcho = lazy(() => import("./pages/ShadowEcho"));
 const UnifiedProgressPage = lazy(() => import("./pages/UnifiedProgressPage"));
+const WorldRally = lazy(() => import("./pages/WorldRally"));
+const RallyAdmin = lazy(() => import("./pages/RallyAdmin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function Router() {
@@ -62,6 +64,8 @@ function Router() {
           <Route path={"/memgenius"} component={MemGeniusArcade} />
           <Route path={"/shadow-echo"} component={ShadowEcho} />
           <Route path={"/progress"} component={UnifiedProgressPage} />
+          <Route path={"/world-rally"} component={WorldRally} />
+          <Route path={"/world-rally/admin"} component={RallyAdmin} />
           <Route path={"/404"} component={NotFound} />
           {/* Final fallback route */}
           <Route component={NotFound} />
