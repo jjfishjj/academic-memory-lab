@@ -207,7 +207,7 @@ export default function MemGeniusArcade() {
     <main className="mg-arcade min-h-screen">
       <header className="mg-topbar">
         <Link href="/" className="mg-back"><ArrowLeft size={17} /> 回到記憶手帳社</Link>
-        <div className="mg-brand"><BrainCircuit size={22} /><b>MemGenius</b><span>PLAY LAB</span></div>
+        <div className="mg-brand"><BrainCircuit size={22} /><b>MemGenius</b><span>PLAY LAB</span><Link href="/world-rally" className="mg-realm-link">進入萬國風行賽 →</Link></div>
         <div className="mg-points"><Trophy size={16} /> {total} XP</div>
       </header>
 

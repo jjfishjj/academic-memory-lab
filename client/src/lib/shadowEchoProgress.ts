@@ -4,6 +4,9 @@ export type ShadowAttempt = {
   transcript: string;
   scores: number[];
   durationMs: number;
+  mode?: string;
+  provider?: "browser" | "azure";
+  issues?: string[];
 };
 
 export type ShadowProgress = {
@@ -36,4 +39,21 @@ export function saveShadowAttempt(attempt: ShadowAttempt): ShadowProgress {
 
 export function completedLessonIds(progress: ShadowProgress) {
   return new Set(progress.attempts.map((attempt) => attempt.lessonId));
+}
+
+export function shadowProgressSummary(progress: ShadowProgress) {
+  const scored = progress.attempts.filter((attempt) => attempt.scores.length >= 4);
+  const totals = scored.map((attempt) => Math.round(attempt.scores.slice(0, 4).reduce((sum, score) => sum + score, 0) / 4));
+  const recent = totals.slice(-10);
+  const previous = totals.slice(-20, -10);
+  const average = (values: number[]) => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+  const issueCounts = new Map<string, number>();
+  scored.forEach((attempt) => attempt.issues?.forEach((issue) => issueCounts.set(issue, (issueCounts.get(issue) ?? 0) + 1)));
+  return {
+    attempts: scored.length,
+    recentScores: recent,
+    average: average(recent),
+    improvement: previous.length ? average(recent) - average(previous) : 0,
+    commonIssues: Array.from(issueCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3),
+  };
 }

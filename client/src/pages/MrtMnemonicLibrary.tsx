@@ -11,25 +11,35 @@ import {
   Trash2,
   Upload,
   Volume2,
+  X,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ALL_MRT_STATIONS } from "@/lib/mrtData";
 import { generateMrtMnemonicCandidates } from "@/lib/mnemonicAi";
 import {
+  applyMrtMnemonicImport,
   deletePersonalMrtMnemonic,
+  experimentDueDay,
   getMrtMnemonic,
+  loadMrtMnemonicExperiments,
   mnemonicStyleOf,
   parseMrtMnemonicImport,
+  previewMrtMnemonicImport,
   qualityAdjustedPreferences,
   loadMrtStylePreferences,
   loadPersonalMrtMnemonics,
   savePersonalMrtMnemonic,
+  saveMrtMnemonicExperiments,
   speakMrtMnemonic,
   recordMrtStyleChoice,
   sortMrtSuggestionsByPreference,
+  summarizeMrtExperiments,
   updatePersonalMrtMnemonics,
   type MrtMnemonicQuality,
+  type MrtMnemonicExperiment,
+  type MrtMnemonicImportPreview,
+  type MrtImportConflictStrategy,
   type PersonalMrtMnemonic,
 } from "@/lib/mrtMnemonics";
 
@@ -51,11 +61,98 @@ export default function MrtMnemonicLibrary() {
     loadMrtStylePreferences()
   );
   const [message, setMessage] = useState("");
+  const [importPreview, setImportPreview] =
+    useState<MrtMnemonicImportPreview | null>(null);
+  const [importStrategy, setImportStrategy] =
+    useState<MrtImportConflictStrategy>("skip");
+  const [experiments, setExperiments] = useState<MrtMnemonicExperiment[]>(() =>
+    loadMrtMnemonicExperiments()
+  );
   const importRef = useRef<HTMLInputElement>(null);
 
   const adjustedPreferences = useMemo(
     () => qualityAdjustedPreferences(items, preferences),
     [items, preferences]
+  );
+  const experimentSummaries = useMemo(
+    () => summarizeMrtExperiments(experiments),
+    [experiments]
+  );
+  const retentionByDay = useMemo(
+    () =>
+      ([1, 3, 7] as const).map(day => {
+        const rows = experimentSummaries.flatMap(summary =>
+          summary.retention.filter(item => item.day === day)
+        );
+        const attempts = rows.reduce((sum, item) => sum + item.attempts, 0);
+        const remembered = rows.reduce((sum, item) => sum + item.remembered, 0);
+        return {
+          day,
+          rate: attempts ? Math.round((remembered / attempts) * 100) : null,
+          attempts,
+        };
+      }),
+    [experimentSummaries]
+  );
+  const abLineStats = useMemo(
+    () =>
+      Object.values(
+        experimentSummaries.reduce<
+          Record<
+            string,
+            { lineId: string; remembered: number; attempts: number }
+          >
+        >((result, summary) => {
+          const lineId =
+            ALL_MRT_STATIONS.find(
+              station => station.code === summary.stationCode
+            )?.lineId ?? "?";
+          const current = result[lineId] ?? {
+            lineId,
+            remembered: 0,
+            attempts: 0,
+          };
+          summary.retention.forEach(item => {
+            current.remembered += item.remembered;
+            current.attempts += item.attempts;
+          });
+          result[lineId] = current;
+          return result;
+        }, {})
+      ),
+    [experimentSummaries]
+  );
+  const abStyleStats = useMemo(
+    () =>
+      Object.values(
+        experimentSummaries
+          .flatMap(summary => summary.variants)
+          .reduce<
+            Record<
+              string,
+              { style: string; remembered: number; attempts: number }
+            >
+          >((result, variant) => {
+            const style =
+              variant.style === "humor"
+                ? "幽默型"
+                : variant.style === "story"
+                  ? "故事型"
+                  : variant.style === "celebrity"
+                    ? "名人型"
+                    : "自訂型";
+            const current = result[style] ?? {
+              style,
+              remembered: 0,
+              attempts: 0,
+            };
+            current.remembered += variant.remembered;
+            current.attempts += variant.attempts;
+            result[style] = current;
+            return result;
+          }, {})
+      ),
+    [experimentSummaries]
   );
   const styleStats = useMemo(
     () =>
@@ -225,30 +322,15 @@ export default function MrtMnemonicLibrary() {
     if (!file) return;
     try {
       const parsed = parseMrtMnemonicImport(JSON.parse(await file.text()));
-      const validCodes = new Set(ALL_MRT_STATIONS.map(station => station.code));
-      const validItems = Object.fromEntries(
-        Object.entries(parsed.mnemonics).filter(([code]) =>
-          validCodes.has(code)
+      setImportPreview(
+        previewMrtMnemonicImport(
+          parsed,
+          items,
+          new Set(ALL_MRT_STATIONS.map(station => station.code)),
+          importStrategy
         )
       );
-      setItems(
-        updatePersonalMrtMnemonics(current => ({ ...current, ...validItems }))
-      );
-      if (parsed.preferences) {
-        const merged = { ...preferences, ...parsed.preferences };
-        localStorage.setItem(
-          "memodesk-mrt-style-preferences",
-          JSON.stringify(merged)
-        );
-        localStorage.setItem(
-          "memodesk-local-updated-at",
-          new Date().toISOString()
-        );
-        setPreferences(merged);
-      }
-      setMessage(
-        `成功匯入 ${Object.keys(validItems).length} 筆聯想；同站碼資料已更新。`
-      );
+      setMessage("");
     } catch (error) {
       setMessage(
         error instanceof Error ? `匯入失敗：${error.message}` : "匯入失敗"
@@ -256,6 +338,67 @@ export default function MrtMnemonicLibrary() {
     } finally {
       if (importRef.current) importRef.current.value = "";
     }
+  };
+  const confirmImport = () => {
+    if (!importPreview) return;
+    const next = applyMrtMnemonicImport(importPreview, items);
+    setItems(updatePersonalMrtMnemonics(() => next));
+    if (importPreview.incoming.preferences) {
+      const merged = { ...preferences, ...importPreview.incoming.preferences };
+      localStorage.setItem(
+        "memodesk-mrt-style-preferences",
+        JSON.stringify(merged)
+      );
+      setPreferences(merged);
+    }
+    setMessage(
+      `已新增 ${importPreview.added.length} 筆、覆蓋 ${importPreview.overwritten.length} 筆、略過 ${importPreview.skipped.length + importPreview.invalid.length} 筆。`
+    );
+    setImportPreview(null);
+  };
+  const startExperiment = (stationCode: string) => {
+    if (suggestions.length < 2) return;
+    const experiment: MrtMnemonicExperiment = {
+      id: `${stationCode}-${Date.now()}`,
+      stationCode,
+      variants: [suggestions[0], suggestions[1]],
+      startedAt: new Date().toISOString(),
+      checks: [],
+    };
+    const next = [experiment, ...experiments];
+    saveMrtMnemonicExperiments(next);
+    setExperiments(next);
+    setMessage(`${stationCode} A/B 測試已開始；第 1、3、7 天會出現回想檢查。`);
+  };
+  const recordExperiment = (
+    id: string,
+    variant: 0 | 1,
+    remembered: boolean
+  ) => {
+    const next = experiments.map(experiment =>
+      experiment.id !== id
+        ? experiment
+        : {
+            ...experiment,
+            checks: experiment.checks.some(
+              check =>
+                check.day === experimentDueDay(experiment) &&
+                check.variant === variant
+            )
+              ? experiment.checks
+              : [
+                  ...experiment.checks,
+                  {
+                    day: experimentDueDay(experiment)!,
+                    variant,
+                    remembered,
+                    answeredAt: new Date().toISOString(),
+                  },
+                ],
+          }
+    );
+    saveMrtMnemonicExperiments(next);
+    setExperiments(next);
   };
   const setQuality = (code: string, quality: MrtMnemonicQuality) =>
     setItems(savePersonalMrtMnemonic(code, { ...items[code], quality }));
@@ -314,6 +457,155 @@ export default function MrtMnemonicLibrary() {
             </span>
           ))}
         </div>
+      </section>
+      <section className="paper-card p-5 mt-6">
+        <div className="flex items-center gap-2">
+          <Bot className="w-5 h-5 text-cyan-700" />
+          <h2 className="font-display font-bold text-xl">AI 聯想 A/B 實驗</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          從任一站的 AI 候選啟動兩種風格，於第 1、3、7 天比較回想效果。
+        </p>
+        <div className="grid grid-cols-3 gap-3 mt-4">
+          {retentionByDay.map(item => (
+            <div key={item.day} className="rounded-xl bg-cyan-50 p-4">
+              <span className="text-xs font-bold text-cyan-800">
+                第 {item.day} 天留存
+              </span>
+              <strong className="block text-3xl mt-1">
+                {item.rate === null ? "—" : `${item.rate}%`}
+              </strong>
+              <small className="text-muted-foreground">
+                {item.attempts} 次回測
+              </small>
+              <div className="h-2 rounded-full bg-white mt-2 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-600"
+                  style={{ width: `${item.rate ?? 0}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        {(abLineStats.length > 0 || abStyleStats.length > 0) && (
+          <div className="grid sm:grid-cols-2 gap-4 mt-4">
+            <div className="rounded-xl border p-4">
+              <strong>依路線</strong>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {abLineStats.map(item => (
+                  <span
+                    key={item.lineId}
+                    className="rounded-full bg-muted px-3 py-1 text-xs font-bold"
+                  >
+                    {item.lineId} ·{" "}
+                    {item.attempts
+                      ? Math.round((item.remembered / item.attempts) * 100)
+                      : 0}
+                    %
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border p-4">
+              <strong>依聯想風格</strong>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {abStyleStats.map(item => (
+                  <span
+                    key={item.style}
+                    className="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-purple-800"
+                  >
+                    {item.style} ·{" "}
+                    {item.attempts
+                      ? Math.round((item.remembered / item.attempts) * 100)
+                      : 0}
+                    %
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {experiments.length === 0 ? (
+          <p className="rounded-xl bg-muted p-4 mt-4 text-sm">
+            尚無實驗；編輯一站、產生 AI 候選後即可開始。
+          </p>
+        ) : (
+          <div className="grid gap-3 mt-4">
+            {experiments.slice(0, 6).map(experiment => {
+              const due = experimentDueDay(experiment);
+              const summary = experimentSummaries.find(
+                item => item.stationCode === experiment.stationCode
+              );
+              const scores = [0, 1].map(
+                variant =>
+                  experiment.checks.filter(
+                    check => check.variant === variant && check.remembered
+                  ).length
+              );
+              return (
+                <div key={experiment.id} className="rounded-xl border p-4">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <strong>
+                      {experiment.stationCode} · 第 {due ?? "—"} 天檢查
+                    </strong>
+                    <span className="text-xs font-bold">
+                      A {scores[0]} 次記得 · B {scores[1]} 次記得
+                    </span>
+                  </div>
+                  {summary?.winner !== null &&
+                    summary?.winner !== undefined && (
+                      <p className="rounded-lg bg-emerald-50 text-emerald-800 p-2 mt-3 text-xs font-bold">
+                        目前勝出：{summary.winner === 0 ? "A" : "B"} ·{" "}
+                        {summary.variants[summary.winner].text}
+                      </p>
+                    )}
+                  <div className="grid sm:grid-cols-2 gap-2 mt-3">
+                    {experiment.variants.map((variant, index) => (
+                      <div
+                        key={variant}
+                        className="rounded-lg bg-muted p-3 text-sm"
+                      >
+                        <b>{index ? "B" : "A"}</b> {variant}
+                        {due &&
+                          !experiment.checks.some(
+                            check =>
+                              check.day === due && check.variant === index
+                          ) && (
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() =>
+                                  recordExperiment(
+                                    experiment.id,
+                                    index as 0 | 1,
+                                    true
+                                  )
+                                }
+                                className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold"
+                              >
+                                記得
+                              </button>
+                              <button
+                                onClick={() =>
+                                  recordExperiment(
+                                    experiment.id,
+                                    index as 0 | 1,
+                                    false
+                                  )
+                                }
+                                className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold"
+                              >
+                                忘了
+                              </button>
+                            </div>
+                          )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
       <div className="paper-card p-4 mt-7 flex flex-col sm:flex-row gap-3">
         <label className="flex-1 relative">
@@ -507,6 +799,13 @@ export default function MrtMnemonicLibrary() {
                                 {suggestion}
                               </button>
                             ))}
+                            <Button
+                              variant="outline"
+                              onClick={() => startExperiment(station.code)}
+                              className="rounded-full justify-self-start"
+                            >
+                              開始前兩個候選的 A/B 測試
+                            </Button>
                           </div>
                         )}
                       </>
@@ -587,6 +886,87 @@ export default function MrtMnemonicLibrary() {
               </article>
             );
           })}
+        </div>
+      )}
+      {importPreview && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 p-4 grid place-items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="匯入預覽"
+        >
+          <section className="bg-background rounded-2xl shadow-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+            <div className="flex justify-between gap-4">
+              <div>
+                <h2 className="font-display font-bold text-2xl">匯入預覽</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  確認後才會寫入，目前資料尚未改動。
+                </p>
+              </div>
+              <button onClick={() => setImportPreview(null)} aria-label="關閉">
+                <X />
+              </button>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => {
+                  setImportStrategy("skip");
+                  setImportPreview(
+                    previewMrtMnemonicImport(
+                      importPreview.incoming,
+                      items,
+                      new Set(ALL_MRT_STATIONS.map(s => s.code)),
+                      "skip"
+                    )
+                  );
+                }}
+                className={`rounded-full border px-4 py-2 text-sm font-bold ${importStrategy === "skip" ? "bg-primary text-primary-foreground" : ""}`}
+              >
+                保留本機、略過衝突
+              </button>
+              <button
+                onClick={() => {
+                  setImportStrategy("overwrite");
+                  setImportPreview(
+                    previewMrtMnemonicImport(
+                      importPreview.incoming,
+                      items,
+                      new Set(ALL_MRT_STATIONS.map(s => s.code)),
+                      "overwrite"
+                    )
+                  );
+                }}
+                className={`rounded-full border px-4 py-2 text-sm font-bold ${importStrategy === "overwrite" ? "bg-primary text-primary-foreground" : ""}`}
+              >
+                用匯入檔覆蓋
+              </button>
+            </div>
+            <div className="grid sm:grid-cols-4 gap-3 mt-5">
+              {(
+                [
+                  ["新增", importPreview.added, "bg-emerald-50"],
+                  ["覆蓋", importPreview.overwritten, "bg-amber-50"],
+                  ["略過", importPreview.skipped, "bg-slate-100"],
+                  ["無效站碼", importPreview.invalid, "bg-red-50"],
+                ] as const
+              ).map(([label, codes, color]) => (
+                <div key={label} className={`rounded-xl p-3 ${color}`}>
+                  <strong>
+                    {label} {codes.length}
+                  </strong>
+                  <p className="text-xs mt-2 break-words">
+                    {codes.join("、") || "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button variant="ghost" onClick={() => setImportPreview(null)}>
+                取消
+              </Button>
+              <Button onClick={confirmImport}>確認匯入</Button>
+            </div>
+          </section>
         </div>
       )}
     </main>

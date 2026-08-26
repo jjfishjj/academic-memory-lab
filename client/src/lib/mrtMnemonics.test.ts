@@ -6,8 +6,12 @@ import {
   mnemonicStyleOf,
   offlineMrtCandidates,
   parseMrtMnemonicImport,
+  previewMrtMnemonicImport,
+  applyMrtMnemonicImport,
+  experimentDueDay,
   qualityAdjustedPreferences,
   sortMrtSuggestionsByPreference,
+  summarizeMrtExperiments,
 } from "./mrtMnemonics";
 
 describe("MRT mnemonic engine", () => {
@@ -19,6 +23,89 @@ describe("MRT mnemonic engine", () => {
       expect(mnemonic.action).toContain(station.name);
       expect(mnemonic.codeHook).toContain(station.code);
     });
+  });
+
+  it("previews import conflicts before applying a chosen strategy", () => {
+    const incoming = parseMrtMnemonicImport({
+      mnemonics: {
+        BR01: { sound: "新版", favorite: false },
+        BR02: { sound: "新增", favorite: true },
+        XX99: { sound: "無效", favorite: false },
+      },
+    });
+    const preview = previewMrtMnemonicImport(
+      incoming,
+      { BR01: { sound: "舊版", favorite: true } },
+      new Set(["BR01", "BR02"]),
+      "skip"
+    );
+    expect(preview.added).toEqual(["BR02"]);
+    expect(preview.skipped).toEqual(["BR01"]);
+    expect(preview.invalid).toEqual(["XX99"]);
+    expect(
+      applyMrtMnemonicImport(preview, {
+        BR01: { sound: "舊版", favorite: true },
+      }).BR01.sound
+    ).toBe("舊版");
+  });
+
+  it("schedules A/B recall checks on days 1, 3 and 7", () => {
+    const experiment = {
+      id: "e1",
+      stationCode: "BR01",
+      variants: ["A", "B"] as [string, string],
+      startedAt: "2026-01-01T00:00:00.000Z",
+      checks: [],
+    };
+    expect(
+      experimentDueDay(experiment, new Date("2026-01-02T00:00:00.000Z"))
+    ).toBe(1);
+    experiment.checks.push({
+      day: 1,
+      variant: 0,
+      remembered: true,
+      answeredAt: "2026-01-02T00:00:00.000Z",
+    });
+    expect(
+      experimentDueDay(experiment, new Date("2026-01-04T00:00:00.000Z"))
+    ).toBe(1);
+    experiment.checks.push({
+      day: 1,
+      variant: 1,
+      remembered: false,
+      answeredAt: "2026-01-02T00:00:00.000Z",
+    });
+    expect(
+      experimentDueDay(experiment, new Date("2026-01-04T00:00:00.000Z"))
+    ).toBe(3);
+  });
+
+  it("summarizes day retention and selects a winning mnemonic", () => {
+    const [summary] = summarizeMrtExperiments([
+      {
+        id: "e1",
+        stationCode: "BR01",
+        variants: ["幽默型：A", "故事型：B"],
+        startedAt: "2026-01-01T00:00:00Z",
+        checks: [
+          {
+            day: 1,
+            variant: 0,
+            remembered: true,
+            answeredAt: "2026-01-02T00:00:00Z",
+          },
+          {
+            day: 1,
+            variant: 1,
+            remembered: false,
+            answeredAt: "2026-01-02T00:00:00Z",
+          },
+        ],
+      },
+    ]);
+    expect(summary.retention[0].rate).toBe(50);
+    expect(summary.variants[0].style).toBe("humor");
+    expect(summary.winner).toBe(0);
   });
 
   it("uses a dedicated story for major and branch stations", () => {

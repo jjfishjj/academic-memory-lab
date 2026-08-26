@@ -1,4 +1,5 @@
 interface ShareCardItem {
+  itemId?: string;
   term: string;
   hint: string;
   mnemonic: string;
@@ -46,10 +47,14 @@ export async function shareMnemonicCard(items: ShareCardItem[]): Promise<ShareCa
   context.fillRect(0, 0, canvas.width, 28);
   context.fillStyle = "#382f28";
   context.font = "700 54px sans-serif";
-  context.fillText("記憶手帳社 · 我的口訣卡", 72, 105);
+  const profileName = localStorage.getItem("memodesk-mnemonic-profile-name")?.trim() || "記憶旅人";
+  const labels: Record<string, string> = { e: "英文", h: "歷史", c: "化學", b: "生物", g: "地理" };
+  const counts = items.reduce<Record<string, number>>((result, item) => { const label = labels[item.itemId?.charAt(0) ?? ""] ?? "自訂"; result[label] = (result[label] ?? 0) + 1; return result; }, {});
+  const subjectSummary = Object.entries(counts).map(([label, count]) => `${label} ${count}`).join(" · ");
+  context.fillText(`${profileName} · 我的口訣卡`, 72, 105);
   context.fillStyle = "#0f766e";
   context.font = "32px sans-serif";
-  context.fillText("把難記的知識，變成唸得出口的記憶。", 72, 158);
+  context.fillText(subjectSummary || "把難記的知識，變成唸得出口的記憶。", 72, 158);
 
   let y = 220;
   items.slice(0, 5).forEach((item, index) => {

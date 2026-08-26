@@ -6,6 +6,8 @@ export interface ElementItem {
   nameZh: string;
   nameEn: string;
   category: ElementCategory;
+  period: number;
+  group: number | null;
 }
 
 const raw: Array<[string, string, string, ElementCategory]> = [
@@ -19,7 +21,29 @@ const raw: Array<[string, string, string, ElementCategory]> = [
   ["Rf","鑪","Rutherfordium","transition"],["Db","𨧀","Dubnium","transition"],["Sg","𨭎","Seaborgium","transition"],["Bh","𨨏","Bohrium","transition"],["Hs","𨭆","Hassium","transition"],["Mt","䥑","Meitnerium","transition"],["Ds","鐽","Darmstadtium","transition"],["Rg","錀","Roentgenium","transition"],["Cn","鎶","Copernicium","transition"],["Nh","鉨","Nihonium","post"],["Fl","鈇","Flerovium","post"],["Mc","鏌","Moscovium","post"],["Lv","鉝","Livermorium","post"],["Ts","鿬","Tennessine","halogen"],["Og","鿫","Oganesson","noble"]
 ];
 
-export const ELEMENTS: ElementItem[] = raw.map(([symbol, nameZh, nameEn, category], index) => ({ number: index + 1, symbol, nameZh, nameEn, category }));
+const PERIOD_ENDS = [2, 10, 18, 36, 54, 86, 118];
+const GROUPS_BY_PERIOD: Record<number, number[]> = {
+  1: [1, 18],
+  2: [1, 2, 13, 14, 15, 16, 17, 18],
+  3: [1, 2, 13, 14, 15, 16, 17, 18],
+  4: Array.from({ length: 18 }, (_, index) => index + 1),
+  5: Array.from({ length: 18 }, (_, index) => index + 1),
+  6: [1, 2, 3, ...Array.from({ length: 15 }, (_, index) => index + 4)],
+  7: [1, 2, 3, ...Array.from({ length: 15 }, (_, index) => index + 4)],
+};
+
+function positionFor(number: number, category: ElementCategory) {
+  const period = PERIOD_ENDS.findIndex((end) => number <= end) + 1;
+  if ((category === "lanthanide" && number !== 57) || (category === "actinide" && number !== 89)) return { period, group: null };
+  const start = period === 1 ? 1 : PERIOD_ENDS[period - 2] + 1;
+  const position = number - start;
+  const adjustedPosition = period >= 6 && number > (period === 6 ? 71 : 103) ? position - 14 : position;
+  return { period, group: GROUPS_BY_PERIOD[period][adjustedPosition] };
+}
+
+export const ELEMENTS: ElementItem[] = raw.map(([symbol, nameZh, nameEn, category], index) => ({
+  number: index + 1, symbol, nameZh, nameEn, category, ...positionFor(index + 1, category),
+}));
 
 export const CATEGORY_STYLE: Record<ElementCategory, { label: string; className: string }> = {
   alkali: { label: "鹼金屬", className: "bg-rose-100 text-rose-800 border-rose-200" }, alkaline: { label: "鹼土金屬", className: "bg-orange-100 text-orange-800 border-orange-200" },

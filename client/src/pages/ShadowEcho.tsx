@@ -3,7 +3,9 @@ import { Link } from "wouter";
 import { ArrowLeft, AudioLines, Brain, ChevronRight, CircleStop, Flame, Gauge, Headphones, Mic, Music2, Play, RotateCcw, Settings2, Sparkles, Target } from "lucide-react";
 import ShadowCoach3D from "@/components/ShadowCoach3D";
 import ShadowAnalysisCard from "@/components/ShadowAnalysisCard";
+import ShadowProgressCard from "@/components/ShadowProgressCard";
 import { assessSpeech, type SpeechAssessment } from "@/lib/speechAssessment";
+import { audioBlobToWav, mergeProfessionalAssessment, requestProfessionalAssessment } from "@/lib/pronunciationService";
 import { LANGUAGE_CODES, SHADOW_CATEGORIES, SHADOW_DIFFICULTIES, dailyLessonIds, lessonsFor, type ShadowCategory, type ShadowDifficulty, type ShadowLanguage } from "@/lib/shadowEchoData";
 import { completedLessonIds, loadShadowProgress, saveShadowAttempt } from "@/lib/shadowEchoProgress";
 
@@ -56,6 +58,7 @@ export default function ShadowEcho() {
   const energyRef = useRef<number[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationRef = useRef<number | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   const lessons = useMemo(() => mode === "boss" ? lessonsFor(language) : lessonsFor(language, difficulty, category), [language, difficulty, category, mode]);
   const lesson = lessons[lessonIndex % lessons.length];
@@ -87,7 +90,7 @@ export default function ShadowEcho() {
     window.speechSynthesis.speak(utterance);
   }
 
-  function completeRecording() {
+  async function completeRecording() {
     setRecording(false);
     recorderRef.current?.stream.getTracks().forEach((track) => track.stop());
     recognitionRef.current?.stop();
@@ -97,7 +100,15 @@ export default function ShadowEcho() {
     const energy = energyRef.current;
     const average = energy.reduce((sum, value) => sum + value, 0) / Math.max(1, energy.length);
     const energyVariation = Math.sqrt(energy.reduce((sum, value) => sum + (value - average) ** 2, 0) / Math.max(1, energy.length));
-    const result = assessSpeech({ expected: lesson.sentence, transcript: transcriptRef.current, language, confidence: confidenceRef.current, durationMs, targetSeconds: lesson.targetSeconds, energyVariation });
+    let result = assessSpeech({ expected: lesson.sentence, transcript: transcriptRef.current, language, confidence: confidenceRef.current, durationMs, targetSeconds: lesson.targetSeconds, energyVariation });
+    const recordedAudio = new Blob(recordedChunksRef.current, { type: recorderRef.current?.mimeType || "audio/webm" });
+    if (recordedAudio.size) {
+      setMessage("正在進行音素、重音與語調分析…");
+      try {
+        const professional = await requestProfessionalAssessment({ audio: await audioBlobToWav(recordedAudio), expected: lesson.sentence, locale: LANGUAGE_CODES[language] });
+        if (professional) result = mergeProfessionalAssessment(result, professional, lesson.sentence, language);
+      } catch { result = { ...result, feedback: `${result.feedback} 專業音素服務暫時無法連線，本次顯示瀏覽器備援評分。` }; }
+    }
     setAssessment(result);
     setScores(result.failure ? [0, 0, 0, 0] : result.scores);
     setTranscript(result.transcript);
@@ -105,7 +116,9 @@ export default function ShadowEcho() {
       setMessage("辨識失敗：請打開分析卡查看原因與修復方式。");
     } else {
       setMessage(`辨識結果符合 ${result.matchedPercent}%。${result.feedback}`);
-      setProgress(saveShadowAttempt({ lessonId: lesson.id, at: new Date().toISOString(), transcript: result.transcript, scores: result.scores, durationMs }));
+      const phonemeIssues = result.phonemeWords?.flatMap((word) => word.phonemes.filter((phoneme) => phoneme.score < 60).map((phoneme) => `/${phoneme.phoneme}/`)) ?? [];
+      const wordIssues = result.diff.filter((token) => token.status === "substitute" || token.status === "missing").map((token) => token.expected).filter((word): word is string => Boolean(word));
+      setProgress(saveShadowAttempt({ lessonId: lesson.id, at: new Date().toISOString(), transcript: result.transcript, scores: result.scores, durationMs, mode, provider: result.provider, issues: Array.from(new Set([...phonemeIssues, ...wordIssues])).slice(0, 8) }));
       if (mode === "boss") setBossScores((previous) => [...previous, Math.round(result.scores.reduce((sum, score) => sum + score, 0) / 4)]);
     }
     setShowAnalysis(true);
@@ -119,7 +132,7 @@ export default function ShadowEcho() {
       const recorder = new MediaRecorder(stream);
       const browserWindow = window as typeof window & { SpeechRecognition?: RecognitionConstructor; webkitSpeechRecognition?: RecognitionConstructor; webkitAudioContext?: typeof AudioContext };
       const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-      transcriptRef.current = ""; recognitionPartsRef.current = []; confidenceRef.current = 0; energyRef.current = []; startedAtRef.current = Date.now();
+      transcriptRef.current = ""; recognitionPartsRef.current = []; confidenceRef.current = 0; energyRef.current = []; recordedChunksRef.current = []; startedAtRef.current = Date.now();
       setTranscript(""); setScores([0, 0, 0, 0]);
       if (Recognition) {
         const recognition = new Recognition();
@@ -140,7 +153,7 @@ export default function ShadowEcho() {
         const sampleEnergy = () => { analyser.getByteTimeDomainData(values); energyRef.current.push(Math.sqrt(values.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / values.length)); animationRef.current = requestAnimationFrame(sampleEnergy); };
         sampleEnergy();
       }
-      recorderRef.current = recorder; recorder.onstop = completeRecording; recorder.start();
+      recorderRef.current = recorder; recorder.ondataavailable = (event) => { if (event.data.size) recordedChunksRef.current.push(event.data); }; recorder.onstop = () => { void completeRecording(); }; recorder.start();
       setRecording(true); setPhase("shadow"); setMessage(Recognition ? "正在辨識你的跟讀…完成後按下停止，或等待自動分析。" : "正在錄音，但此瀏覽器沒有 Speech Recognition；完成後只會顯示支援說明。");
       timerRef.current = window.setTimeout(() => { if (recorder.state !== "inactive") recorder.stop(); }, Math.max(6500, lesson.targetSeconds * 1800));
     } catch { setMessage("尚未取得麥克風權限。你仍可使用播放、分段與回想練習。"); }
@@ -197,6 +210,7 @@ export default function ShadowEcho() {
       <aside className="se-results">
         <div className="se-score-title"><span>真實評分<strong>{totalScore}</strong></span><Gauge /></div><div className="se-metrics">{SCORE_LABELS.map((label, index) => <div key={label}><span>{label}<b>{scores[index]}</b></span><i><em style={{ width: `${scores[index]}%` }} /></i></div>)}</div>
         <div className="se-session-label">{lesson.category} · {difficulty} · {lessons.length} 句</div><div className="se-lesson-list">{lessons.map((item, index) => <button key={item.id} className={lessonIndex === index ? "active" : completedIds.has(item.id) ? "done" : ""} onClick={() => chooseLesson(index)}><span>{completedIds.has(item.id) ? "✓" : index + 1}</span><p>{item.sentence}</p></button>)}</div>
+        <ShadowProgressCard progress={progress} />
         <div className="se-recommend"><b>今日推薦 · 已完成 {dailyDone}/{dailyIds.length}</b><p><span>1</span> Explorer 暖身 · Visual 提示</p><p><span>2</span> Echo · {lesson.category}</p><p><span>3</span> 盲讀回想 · {difficulty}</p></div>
       </aside>
     </div>

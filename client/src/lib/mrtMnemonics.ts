@@ -22,6 +22,50 @@ export interface MrtMnemonicImport {
   preferences?: Partial<MrtStylePreferences>;
 }
 
+export type MrtImportConflictStrategy = "overwrite" | "skip";
+export interface MrtMnemonicImportPreview {
+  added: string[];
+  overwritten: string[];
+  skipped: string[];
+  invalid: string[];
+  incoming: MrtMnemonicImport;
+}
+
+export interface MrtMnemonicExperiment {
+  id: string;
+  stationCode: string;
+  variants: [string, string];
+  startedAt: string;
+  checks: Array<{
+    day: 1 | 3 | 7;
+    variant: 0 | 1;
+    remembered: boolean;
+    answeredAt: string;
+  }>;
+}
+
+export interface MrtExperimentRetention {
+  day: 1 | 3 | 7;
+  remembered: number;
+  attempts: number;
+  rate: number | null;
+}
+
+export interface MrtExperimentSummary {
+  stationCode: string;
+  retention: MrtExperimentRetention[];
+  variants: Array<{
+    text: string;
+    style: MrtMnemonicStyle | null;
+    remembered: number;
+    attempts: number;
+    rate: number | null;
+  }>;
+  winner: 0 | 1 | null;
+}
+
+export const MRT_MNEMONIC_EXPERIMENTS_KEY = "memodesk-mrt-mnemonic-experiments";
+
 const PERSONAL_KEY = "memodesk-mrt-personal-mnemonics";
 export const MRT_PERSONAL_MNEMONICS_KEY = PERSONAL_KEY;
 export const MRT_STYLE_PREFERENCES_KEY = "memodesk-mrt-style-preferences";
@@ -121,6 +165,116 @@ export function parseMrtMnemonicImport(value: unknown): MrtMnemonicImport {
       ? (payload.preferences as Partial<MrtStylePreferences>)
       : undefined;
   return { mnemonics, preferences };
+}
+
+export function previewMrtMnemonicImport(
+  incoming: MrtMnemonicImport,
+  current: Record<string, PersonalMrtMnemonic>,
+  validCodes: Set<string>,
+  strategy: MrtImportConflictStrategy
+): MrtMnemonicImportPreview {
+  const preview: MrtMnemonicImportPreview = {
+    added: [],
+    overwritten: [],
+    skipped: [],
+    invalid: [],
+    incoming,
+  };
+  Object.keys(incoming.mnemonics).forEach(code => {
+    if (!validCodes.has(code)) preview.invalid.push(code);
+    else if (!current[code]) preview.added.push(code);
+    else if (strategy === "overwrite") preview.overwritten.push(code);
+    else preview.skipped.push(code);
+  });
+  return preview;
+}
+
+export function applyMrtMnemonicImport(
+  preview: MrtMnemonicImportPreview,
+  current: Record<string, PersonalMrtMnemonic>
+): Record<string, PersonalMrtMnemonic> {
+  const accepted = [...preview.added, ...preview.overwritten];
+  return accepted.reduce(
+    (next, code) => {
+      next[code] = preview.incoming.mnemonics[code];
+      return next;
+    },
+    { ...current }
+  );
+}
+
+export function loadMrtMnemonicExperiments(): MrtMnemonicExperiment[] {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(MRT_MNEMONIC_EXPERIMENTS_KEY) ?? "[]"
+    );
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveMrtMnemonicExperiments(items: MrtMnemonicExperiment[]) {
+  localStorage.setItem(MRT_MNEMONIC_EXPERIMENTS_KEY, JSON.stringify(items));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
+}
+
+export function experimentDueDay(
+  experiment: MrtMnemonicExperiment,
+  now = new Date()
+): 1 | 3 | 7 | null {
+  const elapsed =
+    (now.getTime() - new Date(experiment.startedAt).getTime()) / 86_400_000;
+  return (
+    ([1, 3, 7] as const).find(
+      day =>
+        elapsed >= day &&
+        experiment.checks.filter(check => check.day === day).length < 2
+    ) ?? null
+  );
+}
+
+export function summarizeMrtExperiments(
+  experiments: MrtMnemonicExperiment[]
+): MrtExperimentSummary[] {
+  return experiments.map(experiment => {
+    const retention = ([1, 3, 7] as const).map(day => {
+      const checks = experiment.checks.filter(check => check.day === day);
+      const remembered = checks.filter(check => check.remembered).length;
+      return {
+        day,
+        remembered,
+        attempts: checks.length,
+        rate: checks.length
+          ? Math.round((remembered / checks.length) * 100)
+          : null,
+      };
+    });
+    const variants = experiment.variants.map((text, variant) => {
+      const checks = experiment.checks.filter(
+        check => check.variant === variant
+      );
+      const remembered = checks.filter(check => check.remembered).length;
+      return {
+        text,
+        style: mnemonicStyleOf(text),
+        remembered,
+        attempts: checks.length,
+        rate: checks.length
+          ? Math.round((remembered / checks.length) * 100)
+          : null,
+      };
+    });
+    const winner =
+      variants[0].attempts &&
+      variants[1].attempts &&
+      variants[0].rate !== variants[1].rate
+        ? variants[0].rate! > variants[1].rate!
+          ? 0
+          : 1
+        : null;
+    return { stationCode: experiment.stationCode, retention, variants, winner };
+  });
 }
 
 export function loadPersonalMrtMnemonics(): Record<

@@ -44,16 +44,20 @@ const emptyOperations: RallyOperations = {
 export default function WorldRallyOnline({
   mapId,
   profile,
+  learningProfile,
   storyState,
   latestRun,
   onRestore,
+  onLearningRestore,
   onGhost,
 }: {
   mapId: string;
   profile: unknown;
+  learningProfile: unknown;
   storyState: unknown;
   latestRun: RallyRun | null;
   onRestore: (profile: unknown, story: unknown) => void;
+  onLearningRestore: (learning: unknown) => void;
   onGhost: (ghost: RallyRun | null) => void;
 }) {
   const [open, setOpen] = useState(false),
@@ -70,6 +74,13 @@ export default function WorldRallyOnline({
     [ghost, setGhost] = useState<RallyRun | null>(null);
   const submitted = useRef(""),
     currentUser = useRef<User | null>(null);
+  function restoreCloudPayload(remote: Awaited<ReturnType<typeof loadRallyProfile>>) {
+    if (!remote) return;
+    const payload = remote.profile as { game?: unknown; learning?: unknown };
+    setName(remote.display_name);
+    onRestore(payload?.game ?? remote.profile, remote.story_state);
+    if (payload?.learning) onLearningRestore(payload.learning);
+  }
   async function refresh(userId = currentUser.current?.id) {
     if (!isSupabaseConfigured) return;
     try {
@@ -97,6 +108,7 @@ export default function WorldRallyOnline({
         currentUser.current = found;
         setUser(found);
         void refresh(found?.id);
+        if (found) void loadRallyProfile(found.id).then(restoreCloudPayload);
       })
       .catch(() => undefined);
     const { data } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -120,12 +132,18 @@ export default function WorldRallyOnline({
     if (submitted.current === key) return;
     submitted.current = key;
     submitRallyRun({ ...latestRun, user_id: user.id, display_name: name })
-      .then(() => {
+      .then(async () => {
+        await saveRallyProfile(
+          user.id,
+          name,
+          { game: profile, learning: learningProfile },
+          storyState
+        );
         setMessage("本場成績已上傳賽季排行榜");
         void refresh();
       })
       .catch(e => setMessage(e instanceof Error ? e.message : "成績上傳失敗"));
-  }, [latestRun, user, name]);
+  }, [latestRun, user, name, profile, learningProfile, storyState]);
   async function login() {
     if (!email.includes("@")) {
       setMessage("請輸入有效 Email");
@@ -146,14 +164,18 @@ export default function WorldRallyOnline({
     setBusy(true);
     try {
       if (direction === "up") {
-        await saveRallyProfile(user.id, name, profile, storyState);
-        setMessage("角色、裝備與劇情進度已上傳");
+        await saveRallyProfile(
+          user.id,
+          name,
+          { game: profile, learning: learningProfile },
+          storyState
+        );
+        setMessage("角色、錯題與學習歷程已上傳");
       } else {
         const remote = await loadRallyProfile(user.id);
         if (!remote) throw new Error("雲端尚無角色資料");
-        setName(remote.display_name);
-        onRestore(remote.profile, remote.story_state);
-        setMessage("已下載雲端角色到本裝置");
+        restoreCloudPayload(remote);
+        setMessage("已下載雲端角色與學習歷程");
       }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "同步失敗");

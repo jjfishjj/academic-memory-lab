@@ -123,15 +123,15 @@ export function orderedRoutesForLine(lineId: MrtLineId): string[][] {
   return [active];
 }
 
-export function dailyRecommendation(progress: MrtProgress, now = new Date()): { lineId: MrtLineId; segmentId: string; reason: string } {
+export function dailyRecommendation(progress: MrtProgress, now = new Date(), hardCodes = new Set<string>()): { lineId: MrtLineId; segmentId: string; reason: string } {
   const dueCounts = MRT_SEGMENTS.map((segment) => ({
     segment,
     due: segment.stationCodes.filter((code) => {
       const saved = progress.stations[code];
-      return saved && new Date(saved.nextReviewAt).getTime() <= now.getTime();
+      return hardCodes.has(code) || (saved && new Date(saved.nextReviewAt).getTime() <= now.getTime());
     }).length,
   })).sort((a, b) => b.due - a.due);
-  if (dueCounts[0]?.due > 0) return { lineId: dueCounts[0].segment.lineId, segmentId: dueCounts[0].segment.id, reason: `${dueCounts[0].due} 站今天到期` };
+  if (dueCounts[0]?.due > 0) return { lineId: dueCounts[0].segment.lineId, segmentId: dueCounts[0].segment.id, reason: `${dueCounts[0].due} 站到期或標記難記，優先複習` };
 
   for (const line of MRT_LINES) {
     const segments = segmentsForLine(line.id);

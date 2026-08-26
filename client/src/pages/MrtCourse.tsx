@@ -126,11 +126,13 @@ function RouteBand({
   stations,
   activeCode,
   revealed = true,
+  hardCodes = new Set<string>(),
 }: {
   line: MrtLine;
   stations: MrtStation[];
   activeCode?: string;
   revealed?: boolean;
+  hardCodes?: Set<string>;
 }) {
   return (
     <div
@@ -140,11 +142,18 @@ function RouteBand({
       {stations.map(station => (
         <div
           key={station.code}
-          className={`route-stop ${station.code === activeCode ? "route-stop-active" : ""}`}
+          className={`route-stop ${station.code === activeCode ? "route-stop-active" : ""} ${hardCodes.has(station.code) ? "route-stop-hard" : ""}`}
         >
           <span className="route-dot" />
           <span className="route-code">{station.code}</span>
-          <span className="route-name">{revealed ? station.name : "？"}</span>
+          <span className="route-name">
+            {revealed ? station.name : "？"}
+            {hardCodes.has(station.code) && (
+              <small className="block text-red-700 font-black">
+                難記 · 優先複習
+              </small>
+            )}
+          </span>
         </div>
       ))}
     </div>
@@ -187,8 +196,26 @@ export default function MrtCourse() {
     setPersonalMnemonics(loadPersonalMrtMnemonics());
   }, []);
   const recommendation = useMemo(
-    () => dailyRecommendation(progress),
-    [progress]
+    () =>
+      dailyRecommendation(
+        progress,
+        new Date(),
+        new Set(
+          Object.entries(personalMnemonics)
+            .filter(([, item]) => item.quality === "hard")
+            .map(([code]) => code)
+        )
+      ),
+    [progress, personalMnemonics]
+  );
+  const hardCodes = useMemo(
+    () =>
+      new Set(
+        Object.entries(personalMnemonics)
+          .filter(([, item]) => item.quality === "hard")
+          .map(([code]) => code)
+      ),
+    [personalMnemonics]
   );
   const lineSegments = line ? segmentsForLine(line.id) : [];
   const allSegmentsPassed =
@@ -522,6 +549,7 @@ export default function MrtCourse() {
           <RouteBand
             line={line}
             stations={line.stations.filter(station => !station.preview)}
+            hardCodes={hardCodes}
           />
           <div className="space-y-4 mt-7">
             {lineSegments.map((item, itemIndex) => {
@@ -652,6 +680,7 @@ export default function MrtCourse() {
             line={line}
             stations={stationsForSegment(segment)}
             revealed={false}
+            hardCodes={hardCodes}
           />
           {profile && (
             <div className="rounded-xl bg-primary/10 text-primary px-4 py-3 mt-5 text-sm font-bold">

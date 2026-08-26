@@ -463,6 +463,7 @@ export default function TrainMnemonic() {
             <Button onClick={async () => {
               try {
                 const result = await shareMnemonicCard(works.map((w) => ({
+                  itemId: w.item.id,
                   term: w.item.term,
                   hint: w.item.hint,
                   mnemonic: w.mnemonic ?? "",

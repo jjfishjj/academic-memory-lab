@@ -81,6 +81,18 @@ describe("integrated learning features", () => {
       "memodesk-mrt-style-preferences",
       JSON.stringify({ humor: 2, story: 1, celebrity: 0 })
     );
+    localStorage.setItem(
+      "memodesk-mrt-mnemonic-experiments",
+      JSON.stringify([{ id: "ab-1" }])
+    );
+    localStorage.setItem(
+      "memodesk-mrt-repair-history",
+      JSON.stringify([{ date: "2026-08-13", accuracy: 80 }])
+    );
+    localStorage.setItem(
+      "memodesk-element-talent-progress-v1",
+      JSON.stringify({ version: 1, talents: { visualBuilder: { xp: 35 } } })
+    );
     const snapshot = collectLocalSnapshot();
     localStorage.clear();
     restoreLocalSnapshot(snapshot);
@@ -90,5 +102,14 @@ describe("integrated learning features", () => {
     expect(
       JSON.parse(localStorage.getItem("memodesk-mrt-style-preferences")!)
     ).toEqual({ humor: 2, story: 1, celebrity: 0 });
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-mrt-mnemonic-experiments")!)
+    ).toEqual([{ id: "ab-1" }]);
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-mrt-repair-history")!)
+    ).toEqual([{ date: "2026-08-13", accuracy: 80 }]);
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-element-talent-progress-v1")!)
+    ).toEqual({ version: 1, talents: { visualBuilder: { xp: 35 } } });
   });
 });

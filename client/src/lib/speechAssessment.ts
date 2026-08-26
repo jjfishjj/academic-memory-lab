@@ -8,6 +8,8 @@ export type SpeechAssessment = {
   feedback: string;
   diff: SpeechDiffToken[];
   failure?: RecognitionFailure;
+  provider?: "browser" | "azure";
+  phonemeWords?: import("./pronunciationService").WordPronunciation[];
 };
 
 function clamp(value: number, min = 0, max = 100) { return Math.max(min, Math.min(max, Math.round(value))); }
@@ -49,5 +51,5 @@ export function assessSpeech(input: { expected: string; transcript: string; lang
   const weakest = scores.indexOf(Math.min(...scores));
   const feedbacks = ["節奏可以再貼近示範速度，注意語塊之間的停頓。", "黃色詞可能有錯音，請放慢並把關鍵音說完整。", "語速或停頓不夠穩定，試著一口氣完成每個語塊。", "紅色詞有遺漏或多說，請依順序再說一次完整句。"];
   const failure = input.transcript.trim() ? undefined : { code: "no-transcript" as const, title: "沒有取得語音逐字稿", detail: "錄音音量或時間資料已收到，但瀏覽器語音服務沒有回傳文字，因此發音與內容無法可靠評分。", fixes: ["使用最新版 Chrome 或 Edge", "確認網址列的麥克風權限為允許", "靠近麥克風，播放示範結束後再開始說", "避免無痕模式或阻擋語音服務的擴充功能"] };
-  return { transcript: input.transcript, scores, matchedPercent: accuracy, feedback: failure ? "完成設定後重新錄製，系統才會顯示逐字分析。" : feedbacks[weakest], diff, failure };
+  return { transcript: input.transcript, scores, matchedPercent: accuracy, feedback: failure ? "完成設定後重新錄製，系統才會顯示逐字分析。" : feedbacks[weakest], diff, failure, provider: "browser" };
 }

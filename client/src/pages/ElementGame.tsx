@@ -4,6 +4,7 @@ import { ArrowLeft, Atom, BookOpen, Check, Flame, RotateCcw, Sparkles, Volume2, 
 import { Button } from "@/components/ui/button";
 import { ELEMENTS, CATEGORY_STYLE, type ElementItem } from "@/lib/elementData";
 import { loadMemoryProfile, TALENT_OPTIONS, VARK_OPTIONS, type MemoryProfile } from "@/lib/memoryProfile";
+import { loadElementProgress, prioritizeElements, recordElementAnswer, repairElementForRound, updateElementRepairQueue } from "@/lib/elementProgress";
 
 type Mode = "symbol" | "name" | "number";
 type Level = 20 | 36 | 118;
@@ -43,22 +44,31 @@ export default function ElementGame() {
   const talent = profile ? TALENT_OPTIONS.find(x => x.id === profile.primaryTalent) : null;
 
   function makeQuestion(preferred?: number) {
-    const target = preferred ?? pool[Math.floor(Math.random() * pool.length)].number - 1;
+    const prioritized = prioritizeElements(pool, loadElementProgress());
+    const candidatePool = prioritized.slice(0, Math.max(1, Math.ceil(prioritized.length / 3)));
+    const preferredItem = preferred === undefined ? undefined : pool.find(element => element.number === preferred + 1);
+    const target = preferredItem ? preferredItem.number - 1 : candidatePool[Math.floor(Math.random() * candidatePool.length)].number - 1;
     setCurrent(target); setAnswer(null);
     setOptions(shuffle([ELEMENTS[target], ...shuffle(pool.filter(x => x.number !== target + 1)).slice(0, 3)]));
   }
-  useEffect(() => { makeQuestion(); }, [level, mode]);
+  useEffect(() => { setWrong(queue => queue.filter(number => number <= level)); makeQuestion(); }, [level, mode]);
 
   function choose(chosen: ElementItem) {
     if (answer !== null) return;
     const ok = chosen.number === item.number;
+    recordElementAnswer(item, ok);
     setAnswer(chosen.number);
     const nextCombo = ok ? combo + 1 : 0;
-    setCombo(nextCombo); if (ok) setScore(s => s + 100 + combo * 10); else setWrong(w => Array.from(new Set([...w, item.number])));
+    setCombo(nextCombo); if (ok) setScore(s => s + 100 + combo * 10);
+    setWrong(queue => updateElementRepairQueue(queue, item.number, ok, level));
     const next = { best: Math.max(stats.best, nextCombo), correct: stats.correct + (ok ? 1 : 0), total: stats.total + 1 };
     setStats(next); localStorage.setItem(STATS_KEY, JSON.stringify(next));
   }
-  function next() { setRound(r => r + 1); makeQuestion(wrong.length && round % 4 === 0 ? wrong[0] - 1 : undefined); }
+  function next() {
+    const nextRound = round + 1;
+    const repairNumber = repairElementForRound(wrong, nextRound, level);
+    setRound(nextRound); makeQuestion(repairNumber === undefined ? undefined : repairNumber - 1);
+  }
   function speak() { if (!("speechSynthesis" in window)) return; speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(`${item.nameZh}，元素符號 ${item.symbol}，原子序 ${item.number}`)); }
   useEffect(() => { const onKey = (e: KeyboardEvent) => { const n = Number(e.key); if (answer === null && n >= 1 && n <= 4 && options[n - 1]) choose(options[n - 1]); if (answer !== null && (e.key === "Enter" || e.key === " ")) next(); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, [answer, options, item]);
 
@@ -74,6 +84,15 @@ export default function ElementGame() {
         <div><p className="font-hand text-2xl text-primary">VARK × 八大記憶天賦</p><h1 className="font-display font-extrabold text-3xl sm:text-4xl">把 118 個元素變成你的記憶隊伍</h1><p className="text-muted-foreground mt-2">看題、選答案、讀個人化提示；錯題會自動回鍋。</p></div>
         <Link href="/train/mrt/profile"><Button variant="outline"><Sparkles /> {profile ? `${vark?.icon} ${vark?.name} × ${talent?.name}` : "設定我的記憶模型"}</Button></Link>
       </section>
+      <Link href="/periodic-table" className="block mb-4 rounded-2xl border-2 border-teal-200 bg-teal-50 p-4 hover:border-primary transition-colors">
+        <div className="flex items-center justify-between gap-3"><div><b className="font-display text-teal-900">先探索完整 18 族 × 7 週期表</b><p className="text-sm text-teal-800/80">搜尋、分類、點選 118 個元素並取得個人化記憶鉤子</p></div><ArrowLeft className="rotate-180 text-primary" /></div>
+      </Link>
+      <Link href="/train/elements/place" className="block mb-4 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4 hover:border-violet-400 transition-colors">
+        <div className="flex items-center justify-between gap-3"><div><b className="font-display text-violet-900">元素歸位：智慧拖放與空白週期表</b><p className="text-sm text-violet-800/80">每局 8–12 張，優先修復錯題與空間位置弱點</p></div><ArrowLeft className="rotate-180 text-violet-700" /></div>
+      </Link>
+      <Link href="/alkali" className="block mb-6 rounded-2xl border-2 border-rose-200 bg-rose-50 p-4 hover:border-rose-400 transition-colors">
+        <div className="flex items-center justify-between gap-3"><div><b className="font-display text-rose-800">不知道從哪開始？先做第 1 族鹼金屬任務</b><p className="text-sm text-rose-700/80">六張元素卡＋VARK 記憶配方＋六題主動回想</p></div><ArrowLeft className="rotate-180 text-rose-700" /></div>
+      </Link>
       <section className="paper-card p-4 mb-6 grid sm:grid-cols-3 gap-4">
         <label className="text-sm font-bold">元素範圍<select aria-label="元素範圍" value={level} onChange={e => setLevel(Number(e.target.value) as Level)} className="mt-2 w-full border rounded-lg bg-white px-3 py-2"><option value="20">新手村 · 1–20</option><option value="36">核心隊 · 1–36</option><option value="118">全週期 · 1–118</option></select></label>
         <label className="text-sm font-bold">題型<select aria-label="題型" value={mode} onChange={e => setMode(e.target.value as Mode)} className="mt-2 w-full border rounded-lg bg-white px-3 py-2"><option value="symbol">符號 → 名稱</option><option value="name">名稱 → 符號</option><option value="number">原子序 → 元素</option></select></label>
