@@ -16,20 +16,21 @@ import {
   Wind,
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { useRealmWorld } from "@/lib/realmWorld";
+import { useRealmIdentity, useRealmWorld } from "@/lib/realmWorld";
 
 type Vec = { x: number; y: number; z: number; ry: number };
 type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action?: string };
 type NetPacket = { type: "state" | "leave"; peer: Peer };
-type GameApi = { attack: () => void; dodge: () => void; interact: () => void; move: (key: string, down: boolean) => void };
+type GameApi = { attack: () => void; dodge: () => void; hit: () => void; interact: () => void; move: (key: string, down: boolean) => void };
 type GameProps = {
   playerName: string;
   playerColor: string;
   peers: Peer[];
   enemyHealth: number;
+  enemyPosition: { x: number; z: number };
   onPose: (pose: Vec & { action: string }) => void;
   onAttackRequest: () => void;
-  onPlayerHit: () => void;
+  onDodgeRequest: () => void;
   onNpcRange: (near: boolean) => void;
   onInteract: () => void;
   registerApi: (api: GameApi | null) => void;
@@ -166,9 +167,10 @@ function PlayCanvasWorld({
   playerColor,
   peers,
   enemyHealth,
+  enemyPosition,
   onPose,
   onAttackRequest,
-  onPlayerHit,
+  onDodgeRequest,
   onNpcRange,
   onInteract,
   registerApi,
@@ -176,10 +178,12 @@ function PlayCanvasWorld({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const peersRef = useRef(peers);
   const enemyHealthRef = useRef(enemyHealth);
-  const callbacks = useRef({ onPose, onAttackRequest, onPlayerHit, onNpcRange, onInteract });
+  const enemyPositionRef = useRef(enemyPosition);
+  const callbacks = useRef({ onPose, onAttackRequest, onDodgeRequest, onNpcRange, onInteract });
   useEffect(() => { peersRef.current = peers; }, [peers]);
   useEffect(() => { enemyHealthRef.current = enemyHealth; }, [enemyHealth]);
-  useEffect(() => { callbacks.current = { onPose, onAttackRequest, onPlayerHit, onNpcRange, onInteract }; });
+  useEffect(() => { enemyPositionRef.current = enemyPosition; }, [enemyPosition]);
+  useEffect(() => { callbacks.current = { onPose, onAttackRequest, onDodgeRequest, onNpcRange, onInteract }; });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -257,7 +261,6 @@ function PlayCanvasWorld({
     const remoteEntities = new Map<string, ReturnType<typeof createDiplomat>>();
     let action = "idle";
     let actionUntil = 0;
-    let lastEnemyHit = 0;
     let npcNear = false;
     let elapsed = 0;
     let lastPose = 0;
@@ -276,6 +279,7 @@ function PlayCanvasWorld({
     };
     const dodge = () => {
       setAction("dodge", 650);
+      callbacks.current.onDodgeRequest();
       const forward = player.root.forward.clone().mulScalar(-2.3);
       player.root.translate(forward);
     };
@@ -295,7 +299,7 @@ function PlayCanvasWorld({
       if (down) { keys.add(key); step(key); }
       else keys.delete(key);
     };
-    registerApi({ attack, dodge, interact, move });
+    registerApi({ attack, dodge, hit: () => setAction("hit", 420), interact, move });
 
     const down = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -348,17 +352,11 @@ function PlayCanvasWorld({
       const enemyAlive = enemyHealthRef.current > 0;
       enemy.enabled = enemyAlive;
       if (enemyAlive) {
-        const serverTime = Date.now() / 1000;
-        const targetX = -7 + Math.sin(serverTime * 0.55) * 3.3;
-        const targetZ = 1.5 + Math.cos(serverTime * 0.7) * 2.2;
+        const targetX = enemyPositionRef.current.x;
+        const targetZ = enemyPositionRef.current.z;
         const enemyPos = enemy.getPosition();
-        enemy.setPosition(pc.math.lerp(enemyPos.x, targetX, dt * 0.7), 0.08 + Math.sin(elapsed * 5) * 0.08, pc.math.lerp(enemyPos.z, targetZ, dt * 0.7));
+        enemy.setPosition(pc.math.lerp(enemyPos.x, targetX, dt * 7), 0.08 + Math.sin(elapsed * 5) * 0.08, pc.math.lerp(enemyPos.z, targetZ, dt * 7));
         enemy.rotateLocal(0, dt * 36, 0);
-        if (player.root.getPosition().distance(enemy.getPosition()) < 1.75 && now - lastEnemyHit > 1050 && action !== "dodge") {
-          lastEnemyHit = now;
-          setAction("hit", 420);
-          callbacks.current.onPlayerHit();
-        }
       }
 
       const near = player.root.getPosition().distance(npc.root.getPosition()) < 2.45;
@@ -426,23 +424,19 @@ const skills = [
 ];
 
 export default function RealmPlayCanvas() {
-  const actorId = useMemo(() => {
-    const existing = sessionStorage.getItem("realm-pc-actor");
-    if (existing) return existing;
-    const created = crypto.randomUUID();
-    sessionStorage.setItem("realm-pc-actor", created);
-    return created;
-  }, []);
+  const identity = useRealmIdentity();
+  const actorId = identity.actorId ?? "identity-pending";
   const [name, setName] = useState(() => localStorage.getItem("realm-pc-name") || `靈語使${Math.floor(Math.random() * 90 + 10)}`);
   const [draftName, setDraftName] = useState(name);
   const [draftRoom, setDraftRoom] = useState(initialRoom);
   const [room, setRoom] = useState(initialRoom);
   const [connected, setConnected] = useState(true);
   const color = useMemo(() => PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)], []);
-  const { peers, transport, updatePose } = useRoom(room, name, color, connected, actorId);
-  const { world, status: authorityStatus, memberCount, isOwner, error: authorityError, pending, act } = useRealmWorld(room, actorId, name, connected);
+  const identityReady = Boolean(identity.actorId) && identity.status !== "error";
+  const { peers, transport, updatePose } = useRoom(room, name, color, connected && identityReady, actorId);
+  const { world, self, status: authorityStatus, memberCount, isOwner, error: worldError, pending, act, syncPose } = useRealmWorld(room, identity.actorId, name, connected && identityReady);
+  const authorityError = identity.error ?? worldError;
   const api = useRef<GameApi | null>(null);
-  const [health, setHealth] = useState(100);
   const [nearNpc, setNearNpc] = useState(false);
   const [dialogueDismissed, setDialogueDismissed] = useState(false);
   const [battleLog, setBattleLog] = useState("前往紅色霧魘巡邏區，先完成戰鬥。 ");
@@ -454,12 +448,14 @@ export default function RealmPlayCanvas() {
   const trust = world.trust;
   const tension = world.tension;
   const won = world.won;
+  const health = self.health;
+  const previousHealth = useRef(health);
   const registerApi = useCallback((value: GameApi | null) => { api.current = value; }, []);
 
-  const playerHit = useCallback(() => {
-    setHealth(value => Math.max(0, value - 12));
-    setBattleLog("霧魘命中你。觀察它靠近的節奏，以 Space 閃避。 ");
-  }, []);
+  const poseUpdate = useCallback((pose: Vec & { action: string }) => {
+    updatePose(pose);
+    syncPose(pose);
+  }, [syncPose, updatePose]);
   const npcRange = useCallback((near: boolean) => setNearNpc(near), []);
   const openDialogue = useCallback(() => {
     void act("open_dialogue");
@@ -467,17 +463,29 @@ export default function RealmPlayCanvas() {
   const requestAttack = useCallback(() => {
     void act("attack");
   }, [act]);
+  const requestDodge = useCallback(() => {
+    void act("dodge");
+  }, [act]);
+
+  useEffect(() => {
+    if (health < previousHealth.current) api.current?.hit();
+    previousHealth.current = health;
+  }, [health]);
 
   useEffect(() => {
     setDialogueDismissed(false);
     const actor = world.last_actor_name || "隊伍";
     if (world.last_action === "world_created") setBattleLog("共同世界已建立。前往巡邏區迎戰霧魘。");
-    else if (world.last_action === "attack") setBattleLog(world.enemy_health === 0 ? `${actor} 完成最後一擊，霧魘已淨化！` : `${actor} 命中霧魘，共享生命剩餘 ${world.enemy_health}%。`);
+    else if (world.last_action === "attack_hit") setBattleLog(world.enemy_health === 0 ? `${actor} 完成最後一擊，霧魘已淨化！` : `${world.last_combat_result}；共享生命剩餘 ${world.enemy_health}%。`);
+    else if (world.last_action === "attack_miss") setBattleLog(world.last_combat_result);
+    else if (world.last_action === "enemy_hit") setBattleLog(`${world.last_combat_result}。霧魘正鎖定 ${world.enemy_target_name ?? "隊伍"}。`);
+    else if (world.last_action === "enemy_evaded") setBattleLog(`${world.last_combat_result}！伺服器已判定本次攻擊無效。`);
+    else if (world.last_action === "dodge") setBattleLog(`${actor} 進入 0.7 秒伺服器閃避窗口。`);
     else if (world.last_action === "open_dialogue") setBattleLog(`${actor} 代表隊伍開啟了沈蘭舟的共同對話。`);
     else if (world.last_action.startsWith("choose_branch:")) setBattleLog(`${actor} 選擇了共同開場立場，外交局勢已同步。`);
     else if (world.last_action.startsWith("skill:")) setBattleLog(world.won ? `${actor} 完成外交協定，全隊通關！` : `${actor} 施放外交技能，信任 ${world.trust}／緊張 ${world.tension}。`);
     else if (world.last_action === "reset") setBattleLog(`${actor} 重置了共同世界。`);
-  }, [world.version, world.last_action, world.last_actor_name, world.enemy_health, world.trust, world.tension, world.won]);
+  }, [world.version, world.last_action, world.last_actor_name, world.last_combat_result, world.enemy_health, world.enemy_target_name, world.trust, world.tension, world.won]);
 
   useEffect(() => {
     if (authorityError) setBattleLog(authorityError);
@@ -527,9 +535,10 @@ export default function RealmPlayCanvas() {
             playerColor={color}
             peers={peers}
             enemyHealth={enemyHealth}
-            onPose={updatePose}
+            enemyPosition={{ x: world.enemy_x, z: world.enemy_z }}
+            onPose={poseUpdate}
             onAttackRequest={requestAttack}
-            onPlayerHit={playerHit}
+            onDodgeRequest={requestDodge}
             onNpcRange={npcRange}
             onInteract={openDialogue}
             registerApi={registerApi}
@@ -547,8 +556,8 @@ export default function RealmPlayCanvas() {
           <div className="rpc-log">{battleLog}</div>
           <div className="rpc-controls"><span>WASD 移動</span><span>J 攻擊</span><span>Space 閃避</span><span>E 交談</span></div>
           <div className="rpc-action-buttons">
-            <button disabled={pending || authorityStatus === "connecting"} onClick={() => api.current?.attack()}><Swords size={18} />攻擊</button>
-            <button onClick={() => api.current?.dodge()}><Wind size={18} />閃避</button>
+            <button disabled={pending || authorityStatus === "connecting" || health <= 0} onClick={() => api.current?.attack()}><Swords size={18} />攻擊</button>
+            <button disabled={pending || health <= 0} onClick={() => api.current?.dodge()}><Wind size={18} />閃避</button>
             <button disabled={pending || !nearNpc || !enemyDefeated} onClick={() => api.current?.interact()}><MessageCircle size={18} />交談</button>
           </div>
           <div className="rpc-dpad">
@@ -561,16 +570,17 @@ export default function RealmPlayCanvas() {
             <header><div><Radio size={17} /><b>權威共同世界</b></div><span className={authorityStatus === "server" ? "online" : ""}>{authorityStatus === "server" ? "伺服器裁決" : authorityStatus === "connecting" ? "連線中" : authorityStatus === "local" ? "本機模擬" : "需要重連"}</span></header>
             <div className="rpc-room-form"><input aria-label="玩家名稱" value={draftName} maxLength={14} onChange={event => setDraftName(event.target.value)} /><input aria-label="房號" value={draftRoom} maxLength={12} onChange={event => setDraftRoom(event.target.value.toUpperCase())} /><button onClick={joinRoom}><LogIn size={15} />加入</button></div>
             <div className="rpc-room-code"><div><small>房號</small><b>{room}</b></div><button onClick={copyInvite}><Copy size={14} />{copied ? "已複製" : "邀請"}</button></div>
+            <p className={`rpc-identity-note ${identity.status}`}><Shield size={13} />{identity.status === "anonymous" ? `匿名玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "authenticated" ? `帳號玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "local" ? "本機臨時身分" : identity.status === "error" ? identity.error : "正在取得安全玩家身分…"}</p>
             <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{name.slice(0, 1)}</span><b>{name}</b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{peer.name.slice(0, 1)}</span><b>{peer.name}</b><em>{peer.action === "run" ? "移動中" : "在線"}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
             {authorityStatus === "local" && <p className="rpc-network-note">目前為本機狀態機；設定 Supabase 後會自動切換成資料庫權威裁決。</p>}
             {authorityStatus === "error" && <p className="rpc-network-note error">{authorityError} 請更換房號後重新加入。</p>}
-            {authorityStatus === "server" && <p className="rpc-network-note success">敵人、任務、NPC 與外交數值由伺服器統一裁決；位置動畫透過 {transport === "supabase" ? "Realtime" : "本機頻道"} 傳送。</p>}
+            {authorityStatus === "server" && <p className="rpc-network-note success">身分、位置、距離、命中、閃避與敵人 AI 由伺服器裁決；動畫透過 {transport === "supabase" ? "Realtime" : "本機頻道"} 平滑呈現。</p>}
           </section>
 
           <section className="rpc-quest-card">
             <header><small>共享敵人 · 霧魘</small><b>{enemyHealth > 0 ? `${enemyHealth}%` : "全隊已淨化"}</b></header>
             <i><em style={{ width: `${enemyHealth}%` }} /></i>
-            <p>所有隊員攻擊同一條伺服器生命值。最後一擊會為全隊解鎖 NPC。</p>
+            <p>{enemyHealth > 0 ? `仇恨目標：${world.enemy_target_name ?? "巡邏中"} · 座標 ${world.enemy_x.toFixed(1)}, ${world.enemy_z.toFixed(1)}` : "最後一擊已為全隊解鎖 NPC。"}</p>
           </section>
 
           <section className="rpc-animation-card">

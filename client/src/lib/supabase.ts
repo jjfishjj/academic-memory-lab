@@ -14,6 +14,11 @@ export const supabase = isSupabaseConfigured
   : null;
 
 const SNAPSHOT_KEYS = [
+  "memodesk-unified-training-v1",
+  "memodesk-gym-stats",
+  "memodesk-template-stats",
+  "memodesk-shadow-echo-progress-v1",
+  "memodesk-roleplay-stamps-v1",
   "memodesk-mrt-progress-v2",
   "memodesk-memory-profile-v1",
   "memodesk-achievements-v1",

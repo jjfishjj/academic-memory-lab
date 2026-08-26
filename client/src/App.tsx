@@ -33,6 +33,7 @@ const MemoryTopicDetail = lazy(() => import("./pages/MemoryTopicDetail"));
 const MemoryTopicTraining = lazy(() => import("./pages/MemoryTopicTraining"));
 const MemGeniusArcade = lazy(() => import("./pages/MemGeniusArcade"));
 const ShadowEcho = lazy(() => import("./pages/ShadowEcho"));
+const UnifiedProgressPage = lazy(() => import("./pages/UnifiedProgressPage"));
 const RealmDiplomacy = lazy(() => import("./pages/RealmDiplomacy"));
 const RealmPlayCanvas = lazy(() => import("./pages/RealmPlayCanvas"));
 const WorldRally = lazy(() => import("./pages/WorldRally"));
@@ -72,6 +73,7 @@ function Router() {
           <Route path={"/train/mrt/mnemonics"} component={MrtMnemonicLibrary} />
           <Route path={"/train/mrt/repair"} component={MrtRepair} />
           <Route path={"/train/elements"} component={ElementGame} />
+          <Route path={"/explore"} component={ElementGame} />
           <Route path={"/alkali"} component={AlkaliLab} />
           <Route path={"/periodic-table"} component={PeriodicExplorer} />
           <Route
@@ -89,6 +91,7 @@ function Router() {
           />
           <Route path={"/memgenius"} component={MemGeniusArcade} />
           <Route path={"/shadow-echo"} component={ShadowEcho} />
+          <Route path={"/progress"} component={UnifiedProgressPage} />
           <Route path={"/realm-diplomacy"} component={RealmDiplomacy} />
           <Route path={"/realm-playcanvas"} component={RealmPlayCanvas} />
           <Route path={"/world-rally"} component={WorldRally} />

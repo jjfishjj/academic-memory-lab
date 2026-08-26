@@ -12,6 +12,7 @@ import { type SubjectPack, type KnowledgeItem } from "@/lib/gameData";
 import { GESTURE_IDEAS, addTemplateStats, takeItems, type GestureIdea } from "@/lib/templateData";
 import PackPicker from "@/components/PackPicker";
 import TrainShell from "@/components/TrainShell";
+import { recordTrainingSession } from "@/lib/unifiedStats";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
@@ -77,6 +78,8 @@ export default function TrainGesture() {
         [{ label: "情境編碼", value: 1 }, { label: "即時輸出", value: 2 }, { label: "主動回想", value: 2 }],
         "gestureRuns",
       );
+      const correct = works.filter((work) => work.recalled).length + (ok ? 1 : 0);
+      recordTrainingSession({ module: "gesture", label: "微動作記憶錨點", score: Math.round((correct / Math.max(1, works.length)) * 100), abilities: { "情境編碼": 1, "即時輸出": 2, "主動回想": 2 } });
       setPhase("result");
     }
   };

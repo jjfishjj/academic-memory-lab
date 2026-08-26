@@ -18,6 +18,7 @@ import {
   Atom,
   BrainCircuit,
   AudioLines,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import { loadStats, type GymStats } from "@/lib/gameData";
 
@@ -123,7 +124,7 @@ export default function Home() {
             <span className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Clock className="w-4 h-4" /> 約 8 分鐘 · 免登入 · 進度自動保存
             </span>
-            <Link href="/memory">
+            <Link href="/periodic-table">
               <Button
                 size="lg"
                 variant="outline"
@@ -148,6 +149,15 @@ export default function Home() {
                 className="font-display font-bold text-base rounded-full px-7 h-12 border-[#84f65f]/70 bg-[#0b1822] text-[#b7ff8b] hover:bg-[#102531] hover:text-white"
               >
                 <AudioLines className="w-5 h-5" /> Shadow Echo 3D 跟讀
+              </Button>
+            </Link>
+            <Link href="/progress">
+              <Button
+                size="lg"
+                variant="outline"
+                className="font-display font-bold text-base rounded-full px-7 h-12 border-primary/40 bg-[#fff8df]"
+              >
+                <ChartNoAxesCombined className="w-5 h-5" /> 跨週訓練週記
               </Button>
             </Link>
           </div>

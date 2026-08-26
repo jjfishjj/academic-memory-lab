@@ -13,9 +13,12 @@ interface Props {
   onPick: (pack: SubjectPack) => void;
   /** 額外說明，例如「劇本殺會取前 5 個知識點當核心詞」 */
   note?: string;
+  /** 劇本殺專用：把通用題庫改以社團案卷呈現，避免像一般卡片目錄。 */
+  variant?: "default" | "casefile";
 }
 
-export default function PackPicker({ onPick, note }: Props) {
+export default function PackPicker({ onPick, note, variant = "default" }: Props) {
+  const casefile = variant === "casefile";
   const [customPacks, setCustomPacks] = useState<SubjectPack[]>(() => loadCustomPacks());
   const [building, setBuilding] = useState(false);
   const [query, setQuery] = useState("");
@@ -53,7 +56,7 @@ export default function PackPicker({ onPick, note }: Props) {
   }
 
   return (
-    <div>
+    <div className={casefile ? "casefile-picker" : undefined}>
       {note && <p className="doodle-note text-xl mb-4">{note}</p>}
 
       {/* 自建卡包入口 */}
@@ -61,12 +64,12 @@ export default function PackPicker({ onPick, note }: Props) {
         className="sticky-note sticky-yellow-bg tilt-r p-5 mb-8 w-full max-w-2xl text-left group relative block">
         <div className="washi washi-yellow" />
         <div className="flex items-center gap-4">
-          <span className="text-4xl">✂️</span>
+          <span className={casefile ? "casefile-pictogram" : "text-4xl"}>{casefile ? "案" : "✂️"}</span>
           <div className="flex-1">
             <h3 className="font-display font-bold text-xl text-amber-900 group-hover:underline decoration-wavy underline-offset-4">
-              <Sparkles className="w-4 h-4 inline -mt-1" /> 做一包自己的知識點
+              <Sparkles className="w-4 h-4 inline -mt-1" /> {casefile ? "建立自己的核心詞案卷" : "做一包自己的知識點"}
             </h3>
-            <p className="text-sm text-amber-800">單字、年份、事件、流程都可以——貼進來變成你的專屬訓練材料</p>
+            <p className="text-sm text-amber-800">{casefile ? "把要記住的核心詞整理成證物，接著交給五幕劇情逐一觸發。" : "單字、年份、事件、流程都可以——貼進來變成你的專屬訓練材料"}</p>
           </div>
           <Plus className="w-6 h-6 text-amber-700 shrink-0" />
         </div>
@@ -84,11 +87,11 @@ export default function PackPicker({ onPick, note }: Props) {
                   className="absolute top-3 right-3 p-1.5 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all">
                   <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="text-4xl mb-3">{p.emoji}</div>
+                <div className={casefile ? "casefile-pictogram mb-3" : "text-4xl mb-3"}>{casefile ? "檔" : p.emoji}</div>
                 <h3 className="font-display font-bold text-xl mb-1">{p.name}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
                 <button onClick={() => onPick(p)} className="doodle-note text-xl inline-flex items-center gap-1 hover:text-primary transition-colors">
-                  用這包訓練 <ArrowRight className="w-4 h-4" />
+                  {casefile ? "翻開案卷" : "用這包訓練"} <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             ))}
@@ -96,7 +99,7 @@ export default function PackPicker({ onPick, note }: Props) {
         </div>
       )}
 
-      <p className="doodle-note text-xl mb-3">starter packs — 官方練習包 ✎</p>
+      <p className="doodle-note text-xl mb-3">{casefile ? "casefile index — 社團案卷索引 ✎" : "starter packs — 官方練習包 ✎"}</p>
       <div className="paper-card mb-5 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_160px_160px]" aria-label="題庫篩選器">
         <label className="relative block">
           <span className="sr-only">搜尋題目</span>
@@ -124,16 +127,16 @@ export default function PackPicker({ onPick, note }: Props) {
       <div className="grid md:grid-cols-3 gap-6">
         {filteredPacks.map((p, i) => (
           <button key={p.id} onClick={() => onPick(p)}
-            className={`paper-card ${i % 2 === 0 ? "tilt-l" : "tilt-r"} p-6 text-left group relative`}>
+            className={`paper-card ${casefile ? "casefile-card" : ""} ${i % 2 === 0 ? "tilt-l" : "tilt-r"} p-6 text-left group relative`}>
             <span className={`tape-corner ${i % 2 === 0 ? "tape-tl" : "tape-tr"}`} />
-            <div className="text-4xl mb-3">{p.emoji}</div>
+            <div className={casefile ? "casefile-pictogram mb-3" : "text-4xl mb-3"}>{casefile ? "案" : p.emoji}</div>
             <h3 className="font-display font-bold text-xl mb-1 group-hover:text-primary transition-colors">{p.name}</h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-3">{p.desc}</p>
             <span className="mb-3 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
               本輪 {p.items.length} 題
             </span>
             <br />
-            <span className="doodle-note text-xl inline-flex items-center gap-1">就決定是你了 <ArrowRight className="w-4 h-4" /></span>
+            <span className="doodle-note text-xl inline-flex items-center gap-1">{casefile ? "翻開案卷" : "就決定是你了"} <ArrowRight className="w-4 h-4" /></span>
           </button>
         ))}
       </div>

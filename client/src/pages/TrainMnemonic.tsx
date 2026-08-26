@@ -17,6 +17,7 @@ import { shareMnemonicCard } from "@/lib/shareCard";
 import PackPicker from "@/components/PackPicker";
 import MnemonicLibraryPanel from "@/components/MnemonicLibraryPanel";
 import TrainShell from "@/components/TrainShell";
+import { recordTrainingSession } from "@/lib/unifiedStats";
 
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
 
@@ -141,6 +142,8 @@ export default function TrainMnemonic() {
         [{ label: "音韻迴路", value: 2 }, { label: "跨域連結", value: 2 }, { label: "主動回想", value: 1 }],
         "mnemonicRuns",
       );
+      const correct = works.filter((work) => work.recalled).length + (ok ? 1 : 0);
+      recordTrainingSession({ module: "mnemonic", label: "諧音口訣創作", score: Math.round((correct / Math.max(1, works.length)) * 100), abilities: { "音韻迴路": 2, "跨域連結": 2, "主動回想": 1 } });
       setPhase("result");
     }
   };

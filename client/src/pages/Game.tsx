@@ -16,6 +16,7 @@ import {
   type SubjectPack, type CampusScene, type Emotion, type KnowledgeItem,
 } from "@/lib/gameData";
 import CustomPackBuilder from "@/components/CustomPackBuilder";
+import { recordTrainingSession } from "@/lib/unifiedStats";
 
 const LOGO = `${import.meta.env.BASE_URL}assets/memodesk-logo_c083e7cf.png`;
 const STAMP = `${import.meta.env.BASE_URL}assets/stamp-success_0e7612b4.png`;
@@ -90,14 +91,14 @@ export default function Game() {
     if (idx < works.length - 1) {
       setIdx(idx + 1);
     } else {
-      finishRun(ok ? newCombo : bestCombo);
+      finishRun(ok, ok ? newCombo : bestCombo);
       setPhase("result");
     }
   };
 
-  const finishRun = (finalBest: number) => {
+  const finishRun = (finalRecall: boolean, finalBest: number) => {
     const s = loadStats();
-    const correct = works.filter((w) => w.recalled).length + 1; // 最後一題尚未寫入 works
+    const correct = works.filter((w) => w.recalled).length + (finalRecall ? 1 : 0);
     s.情境編碼 += 3 + 1;
     s.故事綁定 += 3;
     s.主動回想 += 2;
@@ -105,7 +106,7 @@ export default function Game() {
     s.completedRuns += 1;
     s.bestCombo = Math.max(s.bestCombo, finalBest, bestCombo);
     saveStats(s);
-    void correct;
+    recordTrainingSession({ module: "dual-card", label: "雙卡情境記憶任務", score: Math.round((correct / Math.max(1, works.length)) * 100), abilities: { "情境編碼": 4, "故事綁定": 3, "主動回想": 2, "即時輸出": 3 } });
   };
 
   const restart = () => {
