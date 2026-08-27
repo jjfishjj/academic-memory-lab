@@ -51,6 +51,29 @@ const varks = ["Visual", "Auditory", "Read / Write", "Kinesthetic"];
 const talents = ["Explorer", "Architect", "Melodist", "Narrator", "Connector", "Analyst", "Performer", "Visionary"];
 type Scores = { rhythm: number; stress: number; flow: number; recall: number };
 type RecordingState = "idle" | "countdown" | "recording" | "ready" | "scored";
+type BankProgress = { bestScores: Scores; completed: number[]; currentIndex: number; attempts: number };
+type PlayerProgress = {
+  version: 1;
+  streak: number;
+  lastPracticeDate: string;
+  banks: Record<string, BankProgress>;
+  preferences: { language: Language; difficulty: Difficulty; mode: string; speed: string; vark: string; talent: string };
+};
+const STORAGE_KEY = "shadow-echo-progress-v1";
+const emptyScores = (): Scores => ({ rhythm: 0, stress: 0, flow: 0, recall: 0 });
+const defaultProgress = (): PlayerProgress => ({ version: 1, streak: 0, lastPracticeDate: "", banks: {}, preferences: { language: "English", difficulty: "Intermediate", mode: modes[0], speed: "Normal", vark: "Visual", talent: "Explorer" } });
+const loadProgress = (): PlayerProgress => {
+  try { const saved = window.localStorage.getItem(STORAGE_KEY); if (!saved) return defaultProgress(); const parsed = JSON.parse(saved) as PlayerProgress; return parsed.version === 1 ? parsed : defaultProgress(); }
+  catch { return defaultProgress(); }
+};
+const bankKey = (language: Language, difficulty: Difficulty) => `${language}::${difficulty}`;
+const getBankProgress = (progress: PlayerProgress, language: Language, difficulty: Difficulty): BankProgress => progress.banks[bankKey(language, difficulty)] ?? { bestScores: emptyScores(), completed: [], currentIndex: 0, attempts: 0 };
+const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const nextStreak = (progress: PlayerProgress) => {
+  const today = localDate(); if (progress.lastPracticeDate === today) return progress.streak;
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  return progress.lastPracticeDate === localDate(yesterday) ? progress.streak + 1 : 1;
+};
 
 function SoundStage({ active, level }: { active: boolean; level: number }) {
   const bars = Array.from({ length: 34 }, (_, i) => 18 + Math.abs(Math.sin(i * 0.78)) * 74);
@@ -63,10 +86,13 @@ function SoundStage({ active, level }: { active: boolean; level: number }) {
 }
 
 export default function ShadowEchoLab() {
-  const [index, setIndex] = useState(0); const [phase, setPhase] = useState(0); const [playing, setPlaying] = useState(false);
-  const [mode, setMode] = useState(modes[0]); const [difficulty, setDifficulty] = useState<Difficulty>("Intermediate"); const [speed, setSpeed] = useState("Normal");
-  const [language, setLanguage] = useState<Language>("English"); const [vark, setVark] = useState("Visual"); const [talent, setTalent] = useState("Explorer"); const [setup, setSetup] = useState(false);
-  const [scores, setScores] = useState<Scores>({ rhythm: 0, stress: 0, flow: 0, recall: 0 }); const [streak, setStreak] = useState(7);
+  const [progress, setProgress] = useState<PlayerProgress>(loadProgress);
+  const [language, setLanguage] = useState<Language>(progress.preferences.language); const [difficulty, setDifficulty] = useState<Difficulty>(progress.preferences.difficulty);
+  const initialBank = getBankProgress(progress, progress.preferences.language, progress.preferences.difficulty);
+  const [index, setIndex] = useState(initialBank.currentIndex); const [phase, setPhase] = useState(0); const [playing, setPlaying] = useState(false);
+  const [mode, setMode] = useState(progress.preferences.mode); const [speed, setSpeed] = useState(progress.preferences.speed);
+  const [vark, setVark] = useState(progress.preferences.vark); const [talent, setTalent] = useState(progress.preferences.talent); const [setup, setSetup] = useState(false);
+  const [scores, setScores] = useState<Scores>(emptyScores);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle"); const [countdown, setCountdown] = useState(3); const [recordedUrl, setRecordedUrl] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0); const [voiceLevel, setVoiceLevel] = useState(0); const [feedback, setFeedback] = useState("播放示範後，按下麥克風開始跟讀。"); const [micError, setMicError] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null); const streamRef = useRef<MediaStream | null>(null); const chunksRef = useRef<Blob[]>([]); const levelsRef = useRef<number[]>([]);
@@ -74,6 +100,9 @@ export default function ShadowEchoLab() {
   const lessons = lessonBanks[language][difficulty];
   const lesson = lessons[index % lessons.length];
   const average = Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / 4);
+  const currentBank = getBankProgress(progress, language, difficulty);
+  const bestAverage = Math.round(Object.values(currentBank.bestScores).reduce((a, b) => a + b, 0) / 4);
+  const visibleScores = average ? scores : currentBank.bestScores;
   const daily = useMemo(() => [`${language} ${difficulty} 暖身`, `${talent} · ${vark} 提示`, `${mode.replace(" Mode", "")} · ${lesson.scene}`], [language, difficulty, talent, vark, mode, lesson.scene]);
 
   const cleanupStream = () => {
@@ -81,6 +110,8 @@ export default function ShadowEchoLab() {
     streamRef.current?.getTracks().forEach(track => track.stop()); streamRef.current = null; meterRef.current = null; stopTimerRef.current = null; setVoiceLevel(0);
   };
   useEffect(() => () => { cleanupStream(); if (recordedUrl) URL.revokeObjectURL(recordedUrl); }, [recordedUrl]);
+  useEffect(() => { try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); } catch { /* Storage can be unavailable in private browsing. */ } }, [progress]);
+  useEffect(() => { setProgress(previous => ({ ...previous, preferences: { language, difficulty, mode, speed, vark, talent } })); }, [language, difficulty, mode, speed, vark, talent]);
 
   const resetRecording = () => {
     cleanupStream(); if (recordedUrl) URL.revokeObjectURL(recordedUrl); setRecordedUrl(""); setRecordingState("idle"); setRecordingSeconds(0); setMicError(""); setFeedback("準備好後，再錄一次。");
@@ -97,6 +128,11 @@ export default function ShadowEchoLab() {
     const variance = voiced.reduce((sum, level) => sum + Math.pow(level - mean, 2), 0) / Math.max(1, voiced.length); const durationFit = Math.max(0, 1 - Math.abs(duration - lesson.seconds) / lesson.seconds);
     const rhythm = Math.round(55 + durationFit * 40); const stress = Math.round(Math.min(98, 54 + mean * 520 + Math.sqrt(variance) * 190)); const flow = Math.round(Math.min(98, 48 + coverage * 48)); const recall = phase === 2 ? Math.round((rhythm + flow) / 2) : Math.max(scores.recall, 65);
     const result = { rhythm, stress, flow, recall }; setScores(result); setRecordingState("scored");
+    setProgress(previous => {
+      const key = bankKey(language, difficulty); const bank = getBankProgress(previous, language, difficulty);
+      const bestScores = { rhythm: Math.max(bank.bestScores.rhythm, result.rhythm), stress: Math.max(bank.bestScores.stress, result.stress), flow: Math.max(bank.bestScores.flow, result.flow), recall: Math.max(bank.bestScores.recall, result.recall) };
+      return { ...previous, banks: { ...previous.banks, [key]: { ...bank, bestScores, attempts: bank.attempts + 1 } } };
+    });
     const weakest = Object.entries(result).sort((a, b) => a[1] - b[1])[0][0];
     setFeedback(weakest === "rhythm" ? "節奏可以更貼近示範，試著跟著三個節奏點說。" : weakest === "stress" ? "重音對比可以更明顯，把關鍵字說得更有力。" : weakest === "flow" ? "試著減少停頓，將每個語塊連成一條線。" : "表現很好！可以進入遮稿回想。 ");
   };
@@ -117,11 +153,16 @@ export default function ShadowEchoLab() {
   };
   const nextPhase = () => {
     if (phase < 2) { setPhase(phase + 1); resetRecording(); return; }
-    setStreak(value => value + 1); setIndex(value => (value + 1) % lessons.length); setPhase(0); resetRecording(); setFeedback("新句子已準備好，先聽示範。");
+    const completedIndex = index % lessons.length; const nextIndex = (completedIndex + 1) % lessons.length;
+    setProgress(previous => {
+      const key = bankKey(language, difficulty); const bank = getBankProgress(previous, language, difficulty);
+      return { ...previous, streak: nextStreak(previous), lastPracticeDate: localDate(), banks: { ...previous.banks, [key]: { ...bank, completed: Array.from(new Set([...bank.completed, completedIndex])).sort((a, b) => a - b), currentIndex: nextIndex } } };
+    });
+    setIndex(nextIndex); setPhase(0); setScores(emptyScores()); resetRecording(); setFeedback("進度已保存。新句子已準備好，先聽示範。");
   };
 
   const changeLessonBank = (nextLanguage: Language, nextDifficulty: Difficulty) => {
-    speechSynthesis.cancel(); setPlaying(false); setLanguage(nextLanguage); setDifficulty(nextDifficulty); setIndex(0); setPhase(0); setScores({ rhythm: 0, stress: 0, flow: 0, recall: 0 }); resetRecording(); setFeedback(`已切換到 ${nextLanguage} · ${nextDifficulty}，先聽第一句示範。`);
+    speechSynthesis.cancel(); setPlaying(false); const savedBank = getBankProgress(progress, nextLanguage, nextDifficulty); setLanguage(nextLanguage); setDifficulty(nextDifficulty); setIndex(savedBank.currentIndex); setPhase(0); setScores(emptyScores()); resetRecording(); setFeedback(`已載入 ${nextLanguage} · ${nextDifficulty} 的進度。`);
   };
   const maskText = (text: string) => text.replace(/[\p{L}\p{N}]/gu, "•");
 
@@ -129,7 +170,7 @@ export default function ShadowEchoLab() {
   const primaryLabel = recordingState === "countdown" ? `準備 ${countdown}` : recordingState === "recording" ? "停止錄音" : phase === 0 ? "播放示範" : recordedUrl ? "重新錄音" : "開始錄音";
 
   return <main className="shadow-app">
-    <header className="shadow-topbar"><div className="shadow-brand"><span><AudioLines /></span><div><b>SHADOW ECHO</b><small>LANGUAGE LAB</small></div></div><div className="mission-progress"><span>{language} · {difficulty}</span><div><i style={{ width: `${((index * 3 + phase + 1) / (lessons.length * 3)) * 100}%` }} /></div><b>{index * 3 + phase + 1}/{lessons.length * 3}</b></div><div className="top-actions"><button className="streak-pill"><Flame /> {streak} 天連勝</button><button className="round-icon" aria-label="個人化設定" onClick={() => setSetup(true)}><Settings2 /></button></div></header>
+    <header className="shadow-topbar"><div className="shadow-brand"><span><AudioLines /></span><div><b>SHADOW ECHO</b><small>LANGUAGE LAB</small></div></div><div className="mission-progress"><span>{language} · {difficulty}</span><div><i style={{ width: `${(currentBank.completed.length / lessons.length) * 100}%` }} /></div><b>{currentBank.completed.length}/{lessons.length}</b></div><div className="top-actions"><button className="streak-pill"><Flame /> {progress.streak} 天連勝</button><button className="round-icon" aria-label="個人化設定" onClick={() => setSetup(true)}><Settings2 /></button></div></header>
     <section className="shadow-shell">
       <aside className="control-rail"><label>語言<select value={language} onChange={e => changeLessonBank(e.target.value as Language, difficulty)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><div><span className="rail-label">遊戲模式</span>{modes.map((item, i) => <button key={item} onClick={() => setMode(item)} className={mode === item ? "active" : ""}><i>{["◉", "♫", "◐", "◆"][i]}</i><span>{item}<small>{["逐句跟讀", "掌握重音節奏", "遮稿複述", "連續五句挑戰"][i]}</small></span></button>)}</div><label>難度<select value={difficulty} onChange={e => changeLessonBank(language, e.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select></label><label>速度<div className="segmented">{["Slow", "Normal", "Fast"].map(x => <button type="button" className={speed === x ? "on" : ""} onClick={() => setSpeed(x)} key={x}>{x}</button>)}</div></label><div className="personal-card"><Sparkles /><span><small>你的學習組合</small><b>{vark} · {talent}</b></span><button onClick={() => setSetup(true)}>編輯</button></div></aside>
       <section className="game-stage">
@@ -141,7 +182,7 @@ export default function ShadowEchoLab() {
         <div className="transport"><button className="secondary-control" onClick={speak}><Volume2 /> 重播</button><button disabled={recordingState === "countdown"} className={`main-control ${playing || recordingState === "recording" ? "playing" : ""}`} onClick={primaryAction}>{recordingState === "recording" ? <Square /> : playing ? <Pause /> : phase === 0 ? <Play /> : <Mic />}<span>{primaryLabel}</span></button>{recordedUrl ? <button className="secondary-control" onClick={resetRecording}><RotateCcw /> 重錄</button> : <button className="secondary-control" onClick={nextPhase}>跳過 <ChevronRight /></button>}</div>
         <div className="coach-tip"><span>AI</span><p><b>Coach Nova</b>{lesson.tip}</p></div>
       </section>
-      <aside className="score-rail"><div className="score-head"><div><small>即時分數</small><b>{average || "—"}</b></div><Activity /></div>{([['節奏同步', scores.rhythm], ['重音準確', scores.stress], ['流暢度', scores.flow], ['回想力', scores.recall]] as [string, number][]).map(([label,value]) => <div className="score-row" key={label}><span>{label}<b>{value || "—"}</b></span><i><em style={{ width: `${value}%` }} /></i></div>)}{recordingState === "scored" && <button className="score-next" onClick={nextPhase}>進入下一階段 <ChevronRight /></button>}<div className="sentence-list"><small>本次練習 · 5 句</small>{lessons.map((item, i) => <button onClick={() => { setIndex(i); setPhase(0); resetRecording(); }} className={i === index ? "active" : i < index ? "done" : ""} key={item.text}><span>{i < index ? "✓" : i + 1}</span><p>{item.text}</p></button>)}</div><div className="daily-card"><small>今日推薦</small>{daily.map((item, i) => <p key={item}><span>{i + 1}</span>{item}</p>)}</div></aside>
+      <aside className="score-rail"><div className="score-head"><div><small>{average ? "即時分數" : "歷史最佳"}</small><b>{average || bestAverage || "—"}</b></div><Activity /></div>{([['節奏同步', visibleScores.rhythm], ['重音準確', visibleScores.stress], ['流暢度', visibleScores.flow], ['回想力', visibleScores.recall]] as [string, number][]).map(([label,value]) => <div className="score-row" key={label}><span>{label}<b>{value || "—"}</b></span><i><em style={{ width: `${value}%` }} /></i></div>)}<div className="saved-summary"><span><b>{currentBank.completed.length}/{lessons.length}</b><small>完成關卡</small></span><span><b>{currentBank.attempts}</b><small>錄音次數</small></span><span><b>{progress.streak}</b><small>連勝天數</small></span></div>{recordingState === "scored" && <button className="score-next" onClick={nextPhase}>進入下一階段 <ChevronRight /></button>}<div className="sentence-list"><small>課程進度 · 自動保存</small>{lessons.map((item, i) => { const completed = currentBank.completed.includes(i); return <button onClick={() => { setIndex(i); setPhase(0); setScores(emptyScores()); resetRecording(); setProgress(previous => { const key = bankKey(language, difficulty); const bank = getBankProgress(previous, language, difficulty); return { ...previous, banks: { ...previous.banks, [key]: { ...bank, currentIndex: i } } }; }); }} className={i === index ? "active" : completed ? "done" : ""} key={item.text}><span>{completed ? "✓" : i + 1}</span><p>{item.text}</p></button>; })}</div><div className="daily-card"><small>今日推薦</small>{daily.map((item, i) => <p key={item}><span>{i + 1}</span>{item}</p>)}</div></aside>
     </section>
     {setup && <div className="setup-backdrop"><div className="setup-modal"><button className="modal-close" aria-label="關閉" onClick={() => setSetup(false)}><X /></button><small>PERSONALIZE YOUR LAB</small><h2>你的記憶如何運作？</h2><p>我們會依照你的組合調整提示方式與每日任務。</p><label>VARK 學習型態</label><div className="choice-grid vark-grid">{varks.map(x => <button className={vark === x ? "selected" : ""} onClick={() => setVark(x)} key={x}>{x}</button>)}</div><label>記憶天才型態</label><div className="choice-grid">{talents.map(x => <button className={talent === x ? "selected" : ""} onClick={() => setTalent(x)} key={x}>{x}</button>)}</div><button className="enter-lab" onClick={() => setSetup(false)}>進入實驗室 <ChevronRight /></button></div></div>}
   </main>;
