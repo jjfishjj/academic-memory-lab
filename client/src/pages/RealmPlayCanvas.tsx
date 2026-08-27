@@ -10,17 +10,17 @@ import {
   LogIn,
   MessageCircle,
   Radio,
+  Share2,
   Shield,
   Sparkles,
   Swords,
   Users,
   Wind,
 } from "lucide-react";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { realmTurnstileSiteKey, useRealmIdentity, useRealmWorld } from "@/lib/realmWorld";
 
 type Vec = { x: number; y: number; z: number; ry: number };
-type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action?: string };
+type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action: string; health: number };
 type NetPacket = { type: "state" | "leave"; peer: Peer };
 type GameApi = { attack: () => void; dodge: () => void; hit: () => void; teleport: (x: number, z: number) => void; interact: () => void; move: (key: string, down: boolean) => void };
 type GameProps = {
@@ -40,10 +40,15 @@ type GameProps = {
 const PLAYER_COLORS = ["#55e6c1", "#ffbb55", "#ff6e9b", "#7da6ff"];
 const initialRoom = new URLSearchParams(window.location.search).get("room")?.slice(0, 12).toUpperCase() || "LINGUA";
 
-function useRoom(room: string, name: string, color: string, connected: boolean, actorId: string) {
+function actorColor(actorId: string) {
+  let hash = 0;
+  for (let index = 0; index < actorId.length; index += 1) hash = (hash * 31 + actorId.charCodeAt(index)) >>> 0;
+  return PLAYER_COLORS[hash % PLAYER_COLORS.length];
+}
+
+function useLocalRoom(room: string, name: string, color: string, connected: boolean, actorId: string) {
   const pose = useRef<Vec & { action: string }>({ x: 0, y: 0, z: 8, ry: 180, action: "idle" });
   const [peers, setPeers] = useState<Peer[]>([]);
-  const [transport, setTransport] = useState<"offline" | "local" | "supabase">("offline");
 
   const updatePose = useCallback((next: Vec & { action: string }) => {
     pose.current = next;
@@ -52,15 +57,10 @@ function useRoom(room: string, name: string, color: string, connected: boolean, 
   useEffect(() => {
     if (!connected) {
       setPeers([]);
-      setTransport("offline");
       return;
     }
     const channelName = `memgenius-realm-${room.toLowerCase()}`;
     const local = new BroadcastChannel(channelName);
-    let cloud: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
-    let cloudReady = false;
-    let closed = false;
-
     const accept = (packet: NetPacket) => {
       if (!packet?.peer || packet.peer.id === actorId) return;
       setPeers(current => {
@@ -72,27 +72,13 @@ function useRoom(room: string, name: string, color: string, connected: boolean, 
     };
     local.onmessage = event => accept(event.data as NetPacket);
 
-    if (isSupabaseConfigured && supabase) {
-      cloud = supabase.channel(channelName, { config: { broadcast: { self: false } } });
-      cloud.on("broadcast", { event: "pose" }, payload => accept(payload.payload as NetPacket));
-      cloud.subscribe(status => {
-        if (!closed && status === "SUBSCRIBED") {
-          cloudReady = true;
-          setTransport("supabase");
-        }
-      });
-    } else {
-      setTransport("local");
-    }
-
     const packet = (type: NetPacket["type"]): NetPacket => ({
       type,
-      peer: { id: actorId, name, color, ...pose.current, seenAt: Date.now() },
+      peer: { id: actorId, name, color, ...pose.current, seenAt: Date.now(), health: 100 },
     });
     const send = (type: NetPacket["type"]) => {
       const next = packet(type);
       local.postMessage(next);
-      if (cloudReady) void cloud?.send({ type: "broadcast", event: "pose", payload: next });
     };
     send("state");
     const timer = window.setInterval(() => {
@@ -101,15 +87,13 @@ function useRoom(room: string, name: string, color: string, connected: boolean, 
     }, 100);
 
     return () => {
-      closed = true;
       send("leave");
       window.clearInterval(timer);
       local.close();
-      if (cloud && supabase) void supabase.removeChannel(cloud);
     };
   }, [room, name, color, connected, actorId]);
 
-  return { peers, transport, updatePose };
+  return { peers, updatePose };
 }
 
 function material(color: string, emissive?: string) {
@@ -143,7 +127,54 @@ function primitive(
   return entity;
 }
 
-function createDiplomat(name: string, color: string, parent: pc.Entity) {
+function createNameplate(name: string, color: string, device: pc.GraphicsDevice, parent: pc.Entity) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  if (context) {
+    // PlayCanvas' primitive plane exposes its back face to this billboard camera.
+    // Mirror the source once so player-facing text remains readable in world space.
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.fillStyle = "rgba(4, 17, 23, .88)";
+    context.beginPath();
+    context.roundRect(8, 10, 496, 104, 28);
+    context.fill();
+    context.strokeStyle = color;
+    context.lineWidth = 5;
+    context.stroke();
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(48, 62, 16, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#effcf9";
+    context.font = "700 42px system-ui, sans-serif";
+    context.textBaseline = "middle";
+    context.fillText(name.slice(0, 14), 82, 63, 395);
+  }
+  const texture = new pc.Texture(device, { width: canvas.width, height: canvas.height, format: pc.PIXELFORMAT_RGBA8, mipmaps: false });
+  texture.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.minFilter = pc.FILTER_LINEAR;
+  texture.magFilter = pc.FILTER_LINEAR;
+  texture.setSource(canvas);
+  const plateMaterial = new pc.StandardMaterial();
+  plateMaterial.emissive = new pc.Color(1, 1, 1);
+  plateMaterial.emissiveMap = texture;
+  plateMaterial.opacityMap = texture;
+  plateMaterial.opacityMapChannel = "a";
+  plateMaterial.blendType = pc.BLEND_NORMAL;
+  plateMaterial.depthWrite = false;
+  plateMaterial.cull = pc.CULLFACE_NONE;
+  plateMaterial.useLighting = false;
+  plateMaterial.update();
+  const label = primitive("nameplate", "plane", [3.2, 0.82, 1], [0, 3.65, 0], plateMaterial, parent);
+  label.render!.castShadows = false;
+  return label;
+}
+
+function createDiplomat(name: string, color: string, parent: pc.Entity, device?: pc.GraphicsDevice) {
   const root = new pc.Entity(name);
   parent.addChild(root);
   const cloth = material(color);
@@ -160,7 +191,8 @@ function createDiplomat(name: string, color: string, parent: pc.Entity) {
   const rightLeg = primitive("right-leg", "capsule", [0.25, 0.76, 0.25], [0.28, 0.42, 0], dark, root);
   const sword = primitive("sword", "box", [0.08, 1.05, 0.08], [0.94, 1.25, 0.05], gold, root);
   sword.setLocalEulerAngles(0, 0, -18);
-  return { root, leftArm, rightArm, leftLeg, rightLeg, sword };
+  const nameplate = device ? createNameplate(name, color, device, root) : null;
+  return { root, leftArm, rightArm, leftLeg, rightLeg, sword, nameplate };
 }
 
 function PlayCanvasWorld({
@@ -243,9 +275,9 @@ function PlayCanvasWorld({
     sun.setEulerAngles(48, -32, 0);
     root.addChild(sun);
 
-    const player = createDiplomat(playerName, playerColor, root);
+    const player = createDiplomat(playerName, playerColor, root, app.graphicsDevice);
     player.root.setPosition(0, 0, 8);
-    const npc = createDiplomat("NPC-沈蘭舟", "#d7a64c", root);
+    const npc = createDiplomat("NPC-沈蘭舟", "#d7a64c", root, app.graphicsDevice);
     npc.root.setPosition(8.4, 0, -5.2);
     npc.root.setEulerAngles(0, -90, 0);
     primitive("npc-aura", "cylinder", [1.35, 0.04, 1.35], [8.4, 0.05, -5.2], tealGlow, root);
@@ -379,6 +411,10 @@ function PlayCanvasWorld({
       const desired = new pc.Vec3(p.x, 10.5, p.z + 13.5);
       camera.setPosition(camera.getPosition().lerp(camera.getPosition(), desired, 0.07));
       camera.lookAt(p.x, 1.2, p.z - 1.8);
+      player.nameplate?.lookAt(camera.getPosition());
+      player.nameplate?.rotateLocal(-90, 0, 0);
+      npc.nameplate?.lookAt(camera.getPosition());
+      npc.nameplate?.rotateLocal(-90, 0, 0);
       if (now - lastPose > 90) {
         lastPose = now;
         callbacks.current.onPose({ x: p.x, y: p.y, z: p.z, ry: player.root.getEulerAngles().y, action });
@@ -391,17 +427,23 @@ function PlayCanvasWorld({
       peersRef.current.forEach(peer => {
         let rig = remoteEntities.get(peer.id);
         if (!rig) {
-          rig = createDiplomat(peer.name, peer.color, root);
+          rig = createDiplomat(peer.name, peer.color, root, app.graphicsDevice);
           remoteEntities.set(peer.id, rig);
         }
         const current = rig.root.getPosition();
-        rig.root.setPosition(pc.math.lerp(current.x, peer.x, 0.28), 0, pc.math.lerp(current.z, peer.z, 0.28));
-        rig.root.setEulerAngles(0, peer.ry, 0);
+        const smoothing = 1 - Math.exp(-dt * 10);
+        rig.root.setPosition(pc.math.lerp(current.x, peer.x, smoothing), peer.health > 0 ? 0 : -0.45, pc.math.lerp(current.z, peer.z, smoothing));
+        const rotation = rig.root.getEulerAngles().y;
+        rig.root.setEulerAngles(0, pc.math.lerpAngle(rotation, peer.ry, smoothing), 0);
         const remoteStride = peer.action === "run" ? Math.sin(elapsed * 11) * 38 : 0;
         rig.leftLeg.setLocalEulerAngles(-remoteStride, 0, 0);
         rig.rightLeg.setLocalEulerAngles(remoteStride, 0, 0);
         rig.leftArm.setLocalEulerAngles(remoteStride, 0, 0);
-        rig.rightArm.setLocalEulerAngles(peer.action === "attack" ? -105 : -remoteStride, 0, 0);
+        rig.rightArm.setLocalEulerAngles(peer.action === "attack" ? -105 : -remoteStride, 0, peer.action === "talk" ? -58 : 0);
+        rig.sword.setLocalEulerAngles(peer.action === "attack" ? 78 : 0, 0, peer.action === "attack" ? -70 : -18);
+        rig.root.setLocalScale(1, peer.action === "dodge" ? 0.68 : peer.health > 0 ? 1 : 0.35, 1);
+        rig.nameplate?.lookAt(camera.getPosition());
+        rig.nameplate?.rotateLocal(-90, 0, 0);
       });
     });
     app.start();
@@ -439,10 +481,26 @@ export default function RealmPlayCanvas() {
   const [draftRoom, setDraftRoom] = useState(initialRoom);
   const [room, setRoom] = useState(initialRoom);
   const [connected, setConnected] = useState(true);
-  const color = useMemo(() => PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)], []);
+  const color = useMemo(() => actorColor(actorId), [actorId]);
   const identityReady = Boolean(identity.actorId) && identity.status !== "error";
-  const { peers, transport, updatePose } = useRoom(room, name, color, connected && identityReady, actorId);
-  const { world, self, status: authorityStatus, memberCount, isOwner, error: worldError, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt } = useRealmWorld(room, identity.actorId, name, connected && identityReady);
+  const { peers: localPeers, updatePose } = useLocalRoom(room, name, color, connected && identityReady, actorId);
+  const { world, self, members, status: authorityStatus, memberCount, isOwner, error: worldError, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt } = useRealmWorld(room, identity.actorId, name, connected && identityReady);
+  const authorityPeers = useMemo<Peer[]>(() => members
+    .filter(member => member.actor_id !== actorId)
+    .slice(0, 3)
+    .map(member => ({
+      id: member.actor_id,
+      name: member.display_name,
+      color: actorColor(member.actor_id),
+      x: member.x,
+      y: 0,
+      z: member.z,
+      ry: member.ry,
+      seenAt: Date.now(),
+      action: member.motion,
+      health: member.health,
+    })), [actorId, members]);
+  const peers = authorityStatus === "server" ? authorityPeers : localPeers;
   const authorityError = identity.error ?? worldError;
   const effectiveAuthorityStatus = identity.status === "error" ? "error" : authorityStatus;
   const actionsReady = effectiveAuthorityStatus === "server" || effectiveAuthorityStatus === "local";
@@ -461,6 +519,7 @@ export default function RealmPlayCanvas() {
   const won = world.won;
   const health = self.health;
   const previousHealth = useRef(health);
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${room}`;
   const registerApi = useCallback((value: GameApi | null) => { api.current = value; }, []);
 
   const poseUpdate = useCallback((pose: Vec & { action: string }) => {
@@ -526,6 +585,15 @@ export default function RealmPlayCanvas() {
     window.history.replaceState(null, "", `${window.location.pathname}?room=${next}`);
   }
 
+  function createRoom() {
+    const next = `ALLY-${crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    setDraftRoom(next);
+    setRoom(next);
+    setConnected(true);
+    window.history.replaceState(null, "", `${window.location.pathname}?room=${next}`);
+    setBattleLog(`已建立私人房間 ${next}，複製邀請連結召集最多三名盟友。`);
+  }
+
   function chooseBranch(item: (typeof branches)[number]) {
     void act("choose_branch", item.id);
   }
@@ -535,11 +603,18 @@ export default function RealmPlayCanvas() {
   }
 
   function copyInvite() {
-    const url = `${window.location.origin}${window.location.pathname}?room=${room}`;
-    void navigator.clipboard.writeText(url).then(() => {
+    void navigator.clipboard.writeText(inviteUrl).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     });
+  }
+
+  function shareInvite() {
+    if (!navigator.share) {
+      copyInvite();
+      return;
+    }
+    void navigator.share({ title: `語界仙盟房間 ${room}`, text: "加入我的外交使節隊伍，一起完成霧港協定。", url: inviteUrl });
   }
 
   const stage = ({ combat: 0, npc: 1, dialogue: 2, diplomacy: 3, complete: 4 } as const)[world.quest_stage];
@@ -593,15 +668,18 @@ export default function RealmPlayCanvas() {
 
         <aside className="rpc-sidebar">
           <section className="rpc-room">
-            <header><div><Radio size={17} /><b>權威共同世界</b></div><span className={effectiveAuthorityStatus === "server" ? "online" : ""}>{effectiveAuthorityStatus === "server" ? "伺服器裁決" : effectiveAuthorityStatus === "reconnecting" ? "自動重連" : effectiveAuthorityStatus === "connecting" ? "連線中" : effectiveAuthorityStatus === "local" ? "本機模擬" : "需要設定"}</span></header>
+            <header><div><Users size={17} /><b>隊伍大廳</b></div><span className={effectiveAuthorityStatus === "server" ? "online" : ""}>{effectiveAuthorityStatus === "server" ? "伺服器裁決" : effectiveAuthorityStatus === "reconnecting" ? "自動重連" : effectiveAuthorityStatus === "connecting" ? "連線中" : effectiveAuthorityStatus === "local" ? "本機模擬" : "需要設定"}</span></header>
+            <div className="rpc-lobby-create"><button onClick={createRoom}><Sparkles size={14} />建立私人房間</button><span>最多 4 人即時共同世界</span></div>
+            <small className="rpc-lobby-label">或輸入名稱與房號加入既有隊伍</small>
             <div className="rpc-room-form"><input aria-label="玩家名稱" value={draftName} maxLength={14} onChange={event => setDraftName(event.target.value)} /><input aria-label="房號" value={draftRoom} maxLength={12} onChange={event => setDraftRoom(event.target.value.toUpperCase())} /><button onClick={joinRoom}><LogIn size={15} />加入</button></div>
-            <div className="rpc-room-code"><div><small>房號</small><b>{room}</b></div><button onClick={copyInvite}><Copy size={14} />{copied ? "已複製" : "邀請"}</button></div>
+            <div className="rpc-room-code"><div><small>目前房號</small><b>{room}</b></div><div><button onClick={copyInvite}><Copy size={14} />{copied ? "已複製" : "複製"}</button><button aria-label="分享邀請連結" onClick={shareInvite}><Share2 size={14} />分享</button></div></div>
+            <label className="rpc-invite-link"><span>邀請連結</span><input readOnly aria-label="邀請連結" value={inviteUrl} onFocus={event => event.currentTarget.select()} /></label>
             <p className={`rpc-identity-note ${identity.status}`}><Shield size={13} />{identity.status === "anonymous" ? `匿名玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "authenticated" ? `帳號玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "captcha" ? "等待 Turnstile 真人驗證" : identity.status === "local" ? "本機臨時身分" : identity.status === "error" ? identity.error : "正在取得安全玩家身分…"}</p>
-            <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{name.slice(0, 1)}</span><b>{name}</b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{peer.name.slice(0, 1)}</span><b>{peer.name}</b><em>{peer.action === "run" ? "移動中" : "在線"}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
+            <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{name.slice(0, 1)}</span><b>{name}</b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{peer.name.slice(0, 1)}</span><b>{peer.name}</b><em className={peer.health <= 0 ? "down" : ""}>{peer.health <= 0 ? "倒地" : peer.action === "run" ? "移動中" : peer.action === "attack" ? "戰鬥中" : `${peer.health} HP`}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
             {effectiveAuthorityStatus === "local" && <p className="rpc-network-note">目前為本機狀態機；設定 Supabase 後會自動切換成資料庫權威裁決。</p>}
             {effectiveAuthorityStatus === "error" && <p className="rpc-network-note error">{authorityError} 完成 Auth 設定後重新整理頁面。</p>}
             {effectiveAuthorityStatus === "reconnecting" && <p className="rpc-network-note">連線中斷，正在保留匿名 session 並重新加入房間（第 {reconnectAttempt} 次）。</p>}
-            {effectiveAuthorityStatus === "server" && <p className="rpc-network-note success">身分、位置、距離、命中、閃避與敵人 AI 由伺服器裁決；動畫透過 {transport === "supabase" ? "Realtime" : "本機頻道"} 平滑呈現。</p>}
+            {effectiveAuthorityStatus === "server" && <p className="rpc-network-note success">權威成員快照已連線；隊友位置、生命與動作由伺服器回傳並在場景中平滑呈現。</p>}
           </section>
 
           <section className="rpc-quest-card">

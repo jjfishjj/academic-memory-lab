@@ -42,6 +42,7 @@ export type RealmMember = {
 type WorldEnvelope = {
   world: RealmWorld;
   self: RealmMember;
+  members?: RealmMember[];
   member_count: number;
   is_owner: boolean;
 };
@@ -183,6 +184,7 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
   const safeActor = actorId ?? "00000000-0000-0000-0000-000000000000";
   const [world, setWorld] = useState<RealmWorld>(() => localInitial(room, safeActor));
   const [self, setSelf] = useState<RealmMember>(() => localMember(safeActor, name));
+  const [members, setMembers] = useState<RealmMember[]>(() => [localMember(safeActor, name)]);
   const [status, setStatus] = useState<RealmAuthorityStatus>("connecting");
   const [memberCount, setMemberCount] = useState(1);
   const [isOwner, setIsOwner] = useState(false);
@@ -197,6 +199,7 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
   const applyEnvelope = useCallback((envelope: WorldEnvelope) => {
     setWorld(envelope.world);
     setSelf(envelope.self);
+    if (Array.isArray(envelope.members)) setMembers(envelope.members);
     setMemberCount(envelope.member_count);
     setIsOwner(envelope.is_owner);
   }, []);
@@ -204,7 +207,11 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
   const syncPose = useCallback((pose: { x: number; z: number; ry: number; action: string }) => {
     latestPose.current = pose;
     if (!isSupabaseConfigured) {
-      setSelf(current => ({ ...current, ...pose, motion: pose.action }));
+      setSelf(current => {
+        const next = { ...current, ...pose, motion: pose.action };
+        setMembers([next]);
+        return next;
+      });
     }
   }, []);
 
@@ -218,7 +225,9 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
 
     if (!isSupabaseConfigured || !supabase) {
       setWorld(localInitial(room, actorId));
-      setSelf(localMember(actorId, name));
+      const local = localMember(actorId, name);
+      setSelf(local);
+      setMembers([local]);
       setStatus("local");
       setIsOwner(true);
       return;
@@ -375,5 +384,5 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
     }
   }, [actorId, name, pending, room, safeActor, applyEnvelope]);
 
-  return { world, self, status, memberCount, isOwner, error, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt };
+  return { world, self, members, status, memberCount, isOwner, error, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt };
 }
