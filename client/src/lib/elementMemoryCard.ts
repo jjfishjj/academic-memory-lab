@@ -1,4 +1,5 @@
 import { CATEGORY_STYLE, type ElementCategory, type ElementItem } from "./elementData";
+import { getElementMemoryScene, type ElementMemoryScene } from "./elementMemoryScenes";
 import type { ElementMemoryTip } from "./elementMemoryTips";
 
 export interface ElementMemoryCardContext {
@@ -70,27 +71,61 @@ function drawWrappedText(context: CanvasRenderingContext2D, text: string, x: num
   lines.slice(0, maxLines).forEach((entry, index) => context.fillText(entry, x, y + index * lineHeight));
 }
 
-function drawElementIllustration(context: CanvasRenderingContext2D, element: ElementItem, tip: ElementMemoryTip, theme: ElementMemoryCardTheme) {
-  context.save();
-  context.fillStyle = theme.soft;
+function drawSceneBackdrop(context: CanvasRenderingContext2D, scene: ElementMemoryScene, theme: ElementMemoryCardTheme) {
+  const gradient = context.createLinearGradient(60, 215, 360, 400);
+  gradient.addColorStop(0, theme.soft);
+  gradient.addColorStop(1, theme.background);
+  context.fillStyle = gradient;
   roundedRect(context, 60, 215, 300, 185, 38);
+  context.save();
+  context.beginPath();
+  context.roundRect(60, 215, 300, 185, 38);
+  context.clip();
+  context.globalAlpha = .24;
+  context.fillStyle = theme.accent;
+  if (scene.backdrop === "sky" || scene.backdrop === "space") {
+    for (let index = 0; index < 9; index += 1) context.fillRect(85 + (index * 53) % 250, 238 + (index * 31) % 95, scene.backdrop === "space" ? 5 : 18, scene.backdrop === "space" ? 5 : 7);
+  } else if (scene.backdrop === "city" || scene.backdrop === "factory") {
+    [72, 118, 170, 225, 278, 322].forEach((x, index) => context.fillRect(x, 310 - (index % 3) * 26, 32, 90 + (index % 3) * 26));
+  } else if (scene.backdrop === "nature") {
+    context.beginPath(); context.arc(105, 260, 32, 0, Math.PI * 2); context.fill();
+    context.beginPath(); context.moveTo(60, 360); context.quadraticCurveTo(155, 285, 235, 360); context.quadraticCurveTo(300, 310, 360, 355); context.lineTo(360, 400); context.lineTo(60, 400); context.fill();
+  } else if (scene.backdrop === "water") {
+    for (let index = 0; index < 5; index += 1) { context.beginPath(); context.arc(92 + index * 57, 250 + (index % 2) * 32, 8 + index, 0, Math.PI * 2); context.strokeStyle = theme.accent; context.stroke(); }
+    context.fillRect(60, 345, 300, 55);
+  } else if (scene.backdrop === "clinic" || scene.backdrop === "lab") {
+    context.fillRect(90, 250, 240, 118);
+    context.clearRect(113, 274, 194, 70);
+    context.fillRect(196, 248, 28, 122);
+  } else {
+    context.beginPath(); context.ellipse(210, 365, 132, 28, 0, 0, Math.PI * 2); context.fill();
+  }
+  context.restore();
+}
+
+function drawElementIllustration(context: CanvasRenderingContext2D, element: ElementItem, tip: ElementMemoryTip, theme: ElementMemoryCardTheme) {
+  const scene = getElementMemoryScene(element.number) ?? { backdrop: "stage", actors: [elementMemoryIllustration(tip), "⚛️", "✨"], action: tip.image };
+  context.save();
+  drawSceneBackdrop(context, scene, theme);
   context.strokeStyle = theme.accent;
-  context.lineWidth = 4;
-  context.globalAlpha = .35;
-  context.beginPath(); context.ellipse(210, 305, 112, 45, -.35, 0, Math.PI * 2); context.stroke();
-  context.beginPath(); context.ellipse(210, 305, 112, 45, .35, 0, Math.PI * 2); context.stroke();
-  context.globalAlpha = 1;
+  context.lineWidth = 5;
+  context.strokeRect(78, 231, 264, 151);
+  context.font = "76px Apple Color Emoji, sans-serif";
   context.textAlign = "center";
-  context.font = "108px Apple Color Emoji, sans-serif";
-  context.fillText(elementMemoryIllustration(tip), 210, 343);
+  context.fillText(scene.actors[0], 205, 332);
+  context.font = "43px Apple Color Emoji, sans-serif";
+  context.fillText(scene.actors[1], 112, 283);
+  context.fillText(scene.actors[2], 306, 278);
+  context.fillStyle = "rgba(255,255,255,.88)";
+  roundedRect(context, 86, 345, 248, 35, 17);
   context.fillStyle = theme.accentDark;
-  context.font = "900 42px sans-serif";
-  context.fillText(element.symbol, 210, 386);
+  context.font = "800 17px sans-serif";
+  context.fillText(scene.action, 210, 369);
   context.textAlign = "left";
   context.restore();
 }
 
-export function downloadElementMemoryCard(element: ElementItem, tip: ElementMemoryTip, cardContext: ElementMemoryCardContext) {
+export function renderElementMemoryCard(element: ElementItem, tip: ElementMemoryTip, cardContext: ElementMemoryCardContext) {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
@@ -154,11 +189,23 @@ export function downloadElementMemoryCard(element: ElementItem, tip: ElementMemo
   context.font = "700 24px sans-serif";
   context.fillText("MemoDesk · 把元素貼進腦海裡", 70, 1300);
 
+  return canvas;
+}
+
+export function elementMemoryCardBlob(element: ElementItem, tip: ElementMemoryTip, cardContext: ElementMemoryCardContext) {
+  const canvas = renderElementMemoryCard(element, tip, cardContext);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("圖像卡輸出失敗")), "image/png"));
+}
+
+export async function downloadElementMemoryCard(element: ElementItem, tip: ElementMemoryTip, cardContext: ElementMemoryCardContext) {
+  const blob = await elementMemoryCardBlob(element, tip, cardContext);
+  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = canvas.toDataURL("image/png");
+  anchor.href = objectUrl;
   anchor.download = elementMemoryCardFilename(element);
   anchor.hidden = true;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
 }

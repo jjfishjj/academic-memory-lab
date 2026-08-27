@@ -24,6 +24,7 @@ const MrtRepair = lazy(() => import("./pages/MrtRepair"));
 const ElementGame = lazy(() => import("./pages/ElementGame"));
 const AlkaliLab = lazy(() => import("./pages/AlkaliLab"));
 const PeriodicExplorer = lazy(() => import("./pages/PeriodicExplorer"));
+const ElementMemoryBooklet = lazy(() => import("./pages/ElementMemoryBooklet"));
 const ElementPlacementGame = lazy(() => import("./pages/ElementPlacementGame"));
 const ElementFamilyCourse = lazy(() => import("./pages/ElementFamilyCourse"));
 const ElementTalentArcade = lazy(() => import("./pages/ElementTalentArcade"));
@@ -76,6 +77,7 @@ function Router() {
           <Route path={"/explore"} component={ElementGame} />
           <Route path={"/alkali"} component={AlkaliLab} />
           <Route path={"/periodic-table"} component={PeriodicExplorer} />
+          <Route path={"/periodic-table/cards"} component={ElementMemoryBooklet} />
           <Route
             path={"/train/elements/place"}
             component={ElementPlacementGame}

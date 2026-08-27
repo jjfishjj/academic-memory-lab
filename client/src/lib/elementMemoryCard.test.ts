@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ELEMENTS } from "./elementData";
 import { elementMemoryCardFilename, elementMemoryCardMetadata, elementMemoryCardTheme, elementMemoryIllustration } from "./elementMemoryCard";
 import { getElementMemoryTip } from "./elementMemoryTips";
+import { ELEMENT_MEMORY_SCENES } from "./elementMemoryScenes";
 
 describe("elementMemoryCard", () => {
   it("creates a stable PNG filename", () => {
@@ -28,5 +29,13 @@ describe("elementMemoryCard", () => {
     const xenonTip = getElementMemoryTip(54)!;
     expect(elementMemoryIllustration(xenonTip)).toBe("🚀");
     expect(elementMemoryCardFilename(ELEMENTS[53])).toBe("memodesk-element-54-Xe.png");
+  });
+
+  it("defines 54 independent original Canvas scene compositions", () => {
+    const scenes = Object.values(ELEMENT_MEMORY_SCENES);
+    expect(scenes).toHaveLength(54);
+    expect(new Set(scenes.map(scene => `${scene.backdrop}|${scene.actors.join("|")}|${scene.action}`)).size).toBe(54);
+    expect(ELEMENT_MEMORY_SCENES[1].action).toContain("氣球");
+    expect(ELEMENT_MEMORY_SCENES[54].action).toContain("氙");
   });
 });

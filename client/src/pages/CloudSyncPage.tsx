@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { CheckCircle2, ChevronLeft, Cloud, LogOut, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import type { ElementGuideRouteProgress } from "@/lib/elementGuideProgress";
 import {
   isSupabaseConfigured,
   previewCloudLearningSync,
@@ -18,8 +19,15 @@ function routeLabel(key: string) {
   return type === "period" ? `第 ${value} 週期` : `第 ${value} 族`;
 }
 
-function progressLabel(progress: { completions: number; bestQuizScore: number } | undefined) {
-  return progress ? `完成 ${progress.completions} 次 · 最佳 ${progress.bestQuizScore}/5` : "沒有紀錄";
+function progressLabel(progress: ElementGuideRouteProgress | undefined) {
+  if (!progress) return "沒有紀錄";
+  const difficulty = progress.quizBests;
+  const scores = difficulty ? [
+    difficulty.simple && `簡 ${difficulty.simple.score}/${difficulty.simple.total}`,
+    difficulty.advanced && `進 ${difficulty.advanced.score}/${difficulty.advanced.total}`,
+    difficulty.confusion && `辨 ${difficulty.confusion.score}/${difficulty.confusion.total}`,
+  ].filter(Boolean).join(" · ") : `舊紀錄 ${progress.bestQuizScore}/5`;
+  return `完成 ${progress.completions} 次 · ${scores || "尚未測驗"}`;
 }
 
 export default function CloudSyncPage() {
@@ -152,7 +160,7 @@ export default function CloudSyncPage() {
           <div className="bg-violet-50 p-5">
             <p className="text-xs font-extrabold uppercase tracking-wider text-violet-700">sync conflict preview</p>
             <h2 className="mt-1 font-display text-xl font-extrabold">導覽進度有 {preview.guideDifferences.length} 項不同</h2>
-            <p className="mt-2 text-sm text-muted-foreground">先比較本機與雲端，再決定這次同步方式。合併會保留兩邊路線，並取較高完成次數、較高分數與較新日期。</p>
+            <p className="mt-2 text-sm text-muted-foreground">先比較本機與雲端，再決定這次同步方式。合併會保留兩邊路線，並逐一保留簡單、進階、易混淆的較佳成績。</p>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-white p-2"><span className="text-muted-foreground">本機更新</span><b className="mt-1 block">{new Date(preview.localUpdatedAt).toLocaleString("zh-TW")}</b></div><div className="rounded-lg bg-white p-2"><span className="text-muted-foreground">雲端更新</span><b className="mt-1 block">{preview.remoteUpdatedAt ? new Date(preview.remoteUpdatedAt).toLocaleString("zh-TW") : "尚無資料"}</b></div></div>
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto p-4" aria-label="不同的導覽路線">
