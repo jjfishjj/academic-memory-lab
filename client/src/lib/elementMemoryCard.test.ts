@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ELEMENTS } from "./elementData";
-import { elementMemoryCardFilename, elementMemoryCardMetadata } from "./elementMemoryCard";
+import { elementMemoryCardFilename, elementMemoryCardMetadata, elementMemoryCardTheme, elementMemoryIllustration } from "./elementMemoryCard";
+import { getElementMemoryTip } from "./elementMemoryTips";
 
 describe("elementMemoryCard", () => {
   it("creates a stable PNG filename", () => {
@@ -19,5 +20,13 @@ describe("elementMemoryCard", () => {
       routeLabel: "自由探索",
       quizLabel: "尚未進行路線測驗",
     });
+  });
+
+  it("uses a distinct category palette and an authored scene illustration through element 54", () => {
+    expect(elementMemoryCardTheme(ELEMENTS[0])).not.toEqual(elementMemoryCardTheme(ELEMENTS[1]));
+    expect(elementMemoryCardTheme(ELEMENTS[20]).accent).toBe("#c99022");
+    const xenonTip = getElementMemoryTip(54)!;
+    expect(elementMemoryIllustration(xenonTip)).toBe("🚀");
+    expect(elementMemoryCardFilename(ELEMENTS[53])).toBe("memodesk-element-54-Xe.png");
   });
 });

@@ -1,19 +1,33 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { ChevronLeft, Cloud, LogOut, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Cloud, LogOut, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   isSupabaseConfigured,
+  previewCloudLearningSync,
+  resolveCloudGuideConflict,
   supabase,
   syncLearningData,
+  type CloudGuideResolution,
+  type CloudLearningPreview,
 } from "@/lib/supabase";
+
+function routeLabel(key: string) {
+  const [type, value] = key.split("-");
+  return type === "period" ? `第 ${value} 週期` : `第 ${value} 族`;
+}
+
+function progressLabel(progress: { completions: number; bestQuizScore: number } | undefined) {
+  return progress ? `完成 ${progress.completions} 次 · 最佳 ${progress.bestQuizScore}/5` : "沒有紀錄";
+}
 
 export default function CloudSyncPage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<CloudLearningPreview | null>(null);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -38,6 +52,12 @@ export default function CloudSyncPage() {
   const sync = async () => {
     setBusy(true);
     try {
+      const cloudPreview = await previewCloudLearningSync();
+      if (cloudPreview.remoteExists && cloudPreview.guideDifferences.length > 0) {
+        setPreview(cloudPreview);
+        setMessage(`發現 ${cloudPreview.guideDifferences.length} 條導覽路線不同，請先選擇處理方式。`);
+        return;
+      }
       const result = await syncLearningData();
       setMessage(
         result === "uploaded"
@@ -48,8 +68,22 @@ export default function CloudSyncPage() {
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "同步失敗");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
+  };
+  const resolveConflict = async (resolution: CloudGuideResolution) => {
+    if (!preview) return;
+    setBusy(true);
+    try {
+      await resolveCloudGuideConflict(preview, resolution);
+      setPreview(null);
+      setMessage(resolution === "merge" ? "已合併兩邊的完成次數、最新日期與最佳分數。" : resolution === "local" ? "已保留本機導覽進度並更新雲端。" : "已採用雲端導覽進度並更新本機。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "衝突處理失敗");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <main className="container max-w-2xl py-8">
@@ -112,6 +146,20 @@ export default function CloudSyncPage() {
             </Button>
           </div>
         </div>
+      )}
+      {user && preview && (
+        <section className="paper-card mt-5 overflow-hidden border-2 border-violet-200" aria-label="導覽進度差異預覽">
+          <div className="bg-violet-50 p-5">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-violet-700">sync conflict preview</p>
+            <h2 className="mt-1 font-display text-xl font-extrabold">導覽進度有 {preview.guideDifferences.length} 項不同</h2>
+            <p className="mt-2 text-sm text-muted-foreground">先比較本機與雲端，再決定這次同步方式。合併會保留兩邊路線，並取較高完成次數、較高分數與較新日期。</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-white p-2"><span className="text-muted-foreground">本機更新</span><b className="mt-1 block">{new Date(preview.localUpdatedAt).toLocaleString("zh-TW")}</b></div><div className="rounded-lg bg-white p-2"><span className="text-muted-foreground">雲端更新</span><b className="mt-1 block">{preview.remoteUpdatedAt ? new Date(preview.remoteUpdatedAt).toLocaleString("zh-TW") : "尚無資料"}</b></div></div>
+          </div>
+          <div className="max-h-80 space-y-2 overflow-y-auto p-4" aria-label="不同的導覽路線">
+            {preview.guideDifferences.map(difference => <article key={difference.key} className="rounded-xl border bg-white p-3"><div className="flex items-center justify-between gap-2"><b>{routeLabel(difference.key)}</b><span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-bold">{difference.kind === "different" ? "兩邊不同" : difference.kind === "local-only" ? "只有本機" : "只有雲端"}</span></div><div className="mt-2 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-amber-50 p-2"><span className="text-amber-800">本機</span><p className="mt-1 font-bold">{progressLabel(difference.local)}</p></div><div className="rounded-lg bg-sky-50 p-2"><span className="text-sky-800">雲端</span><p className="mt-1 font-bold">{progressLabel(difference.cloud)}</p></div></div></article>)}
+          </div>
+          <div className="border-t bg-slate-50 p-4"><div className="grid gap-2 sm:grid-cols-3"><Button variant="outline" disabled={busy} onClick={()=>resolveConflict("local")}>保留本機</Button><Button disabled={busy} onClick={()=>resolveConflict("merge")}><CheckCircle2/>合併最佳紀錄</Button><Button variant="outline" disabled={busy} onClick={()=>resolveConflict("cloud")}>採用雲端</Button></div><button type="button" disabled={busy} onClick={()=>{setPreview(null);setMessage("尚未同步，資料維持原狀。");}} className="mt-3 w-full text-xs font-bold text-muted-foreground underline">稍後再決定</button></div>
+        </section>
       )}
       {message && (
         <p className="mt-5 font-bold text-primary" aria-live="polite">
