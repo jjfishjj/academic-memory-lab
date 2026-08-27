@@ -1,0 +1,111 @@
+import type { ElementItem } from "./elementData";
+import type { ElementMemoryTip } from "./elementMemoryTips";
+
+export interface ElementMemoryCardContext {
+  learnerName: string;
+  routeLabel: string;
+  quizScore: number;
+  quizTotal: number;
+}
+
+export function elementMemoryCardFilename(element: ElementItem) {
+  return `memodesk-element-${String(element.number).padStart(2, "0")}-${element.symbol}.png`;
+}
+
+export function elementMemoryCardMetadata(context: ElementMemoryCardContext) {
+  const learnerName = context.learnerName.trim().slice(0, 30) || "記憶手帳學員";
+  const routeLabel = context.routeLabel.trim().slice(0, 40) || "自由探索";
+  const quizTotal = Math.max(0, Math.floor(context.quizTotal));
+  const quizScore = Math.min(Math.max(0, Math.floor(context.quizScore)), quizTotal);
+  return {
+    learnerName,
+    routeLabel,
+    quizLabel: quizTotal > 0 ? `最佳測驗 ${quizScore} / ${quizTotal}` : "尚未進行路線測驗",
+  };
+}
+
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
+  context.fill();
+}
+
+function drawWrappedText(context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines = 4) {
+  const chars = Array.from(text);
+  const lines: string[] = [];
+  let line = "";
+  chars.forEach(char => {
+    const candidate = line + char;
+    if (context.measureText(candidate).width > maxWidth && line) { lines.push(line); line = char; } else line = candidate;
+  });
+  if (line) lines.push(line);
+  lines.slice(0, maxLines).forEach((entry, index) => context.fillText(entry, x, y + index * lineHeight));
+}
+
+export function downloadElementMemoryCard(element: ElementItem, tip: ElementMemoryTip, cardContext: ElementMemoryCardContext) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("瀏覽器無法建立圖像卡");
+
+  context.fillStyle = "#f8f1e4";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#087f73";
+  context.fillRect(0, 0, canvas.width, 180);
+  context.fillStyle = "#ffffff";
+  context.font = "700 38px sans-serif";
+  context.fillText("記憶手帳社 · 元素圖像卡", 70, 82);
+  context.font = "28px sans-serif";
+  context.fillText("諧音 × 圖像 × 用途 × 易混淆", 70, 132);
+
+  context.fillStyle = "#3f3028";
+  context.font = "900 190px sans-serif";
+  context.fillText(element.symbol, 70, 390);
+  context.font = "800 56px sans-serif";
+  context.fillText(`${element.number} · ${element.nameZh}`, 420, 300);
+  context.font = "32px sans-serif";
+  context.fillStyle = "#79665b";
+  context.fillText(element.nameEn, 420, 352);
+
+  const metadata = elementMemoryCardMetadata(cardContext);
+  context.fillStyle = "#e7f3ef";
+  roundedRect(context, 60, 410, 960, 78, 22);
+  context.fillStyle = "#285f59";
+  context.font = "700 22px sans-serif";
+  context.fillText(`學員｜${metadata.learnerName}`, 90, 445);
+  context.font = "21px sans-serif";
+  context.fillText(`路線｜${metadata.routeLabel}`, 90, 474);
+  context.font = "700 22px sans-serif";
+  context.textAlign = "right";
+  context.fillText(metadata.quizLabel, 990, 458);
+  context.textAlign = "left";
+
+  const cards = [
+    { title: "✨ 諧音口訣", text: tip.rhyme, color: "#fff1a8" },
+    { title: "🖼 腦中圖像", text: tip.image, color: "#dff3ff" },
+    { title: "🧪 實際用途", text: tip.use, color: "#def5df" },
+    { title: "⚠ 易混淆提醒", text: tip.confusion, color: "#ffe0df" },
+  ];
+  cards.forEach((card, index) => {
+    const y = 515 + index * 185;
+    context.fillStyle = card.color;
+    roundedRect(context, 60, y, 960, 155, 28);
+    context.fillStyle = "#47382f";
+    context.font = "800 30px sans-serif";
+    context.fillText(card.title, 95, y + 46);
+    context.font = "27px sans-serif";
+    drawWrappedText(context, card.text, 95, y + 86, 880, 34, 2);
+  });
+  context.fillStyle = "#087f73";
+  context.font = "700 24px sans-serif";
+  context.fillText("MemoDesk · 把元素貼進腦海裡", 70, 1300);
+
+  const anchor = document.createElement("a");
+  anchor.href = canvas.toDataURL("image/png");
+  anchor.download = elementMemoryCardFilename(element);
+  anchor.hidden = true;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}

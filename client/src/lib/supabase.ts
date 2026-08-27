@@ -38,6 +38,7 @@ const SNAPSHOT_KEYS = [
   "memodesk-element-course-progress-v1",
   "memodesk-element-talent-progress-v1",
   "memodesk-element-activity-v1",
+  "memodesk-element-guide-progress-v1",
   "memodesk-memory-topics-v1",
   "memodesk-mnemonic-library",
   "memodesk-mnemonic-daily-weakness",

@@ -1,3 +1,5 @@
+import { emptyElementGuideProgress, loadElementGuideProgress, mergeElementGuideProgress, saveElementGuideProgress, type ElementGuideProgress } from "./elementGuideProgress";
+
 export interface MnemonicLibraryEntry {
   id: string;
   itemId: string;
@@ -121,6 +123,7 @@ export interface MnemonicBackup {
   dailyProgress: DailyWeaknessProgress;
   completedDays: string[];
   profileName?: string;
+  elementGuideProgress?: ElementGuideProgress;
 }
 
 export function createMnemonicBackup(entries = loadMnemonicLibrary(), date = new Date()): MnemonicBackup {
@@ -131,6 +134,7 @@ export function createMnemonicBackup(entries = loadMnemonicLibrary(), date = new
     dailyProgress: loadDailyWeaknessProgress(entries, date),
     completedDays: loadCompletedWeaknessDays(),
     profileName: localStorage.getItem(MNEMONIC_PROFILE_NAME_KEY) ?? undefined,
+    elementGuideProgress: loadElementGuideProgress(),
   };
 }
 
@@ -142,7 +146,8 @@ function parseMnemonicBackup(value: unknown): MnemonicBackup {
   }
   const validLibrary = backup.library.every(entry => entry && typeof entry.id === "string" && typeof entry.itemId === "string" && typeof entry.term === "string" && typeof entry.mnemonic === "string" && typeof entry.rating === "number" && typeof entry.updatedAt === "string");
   const progress = backup.dailyProgress as DailyWeaknessProgress;
-  if (!validLibrary || typeof progress.date !== "string" || !Array.isArray(progress.itemIds) || !Array.isArray(progress.completedIds) || !backup.completedDays.every(day => typeof day === "string")) {
+  const validGuideProgress = backup.elementGuideProgress === undefined || (backup.elementGuideProgress && typeof backup.elementGuideProgress === "object" && backup.elementGuideProgress.routes && typeof backup.elementGuideProgress.routes === "object");
+  if (!validLibrary || !validGuideProgress || typeof progress.date !== "string" || !Array.isArray(progress.itemIds) || !Array.isArray(progress.completedIds) || !backup.completedDays.every(day => typeof day === "string")) {
     throw new Error("備份內容缺少必要欄位");
   }
   return backup as MnemonicBackup;
@@ -187,11 +192,13 @@ export function restoreMnemonicBackup(value: unknown, mode: "replace" | "merge" 
     localStorage.setItem(DAILY_KEY, JSON.stringify(mergedProgress));
     localStorage.setItem(COMPLETED_DAYS_KEY, JSON.stringify(Array.from(new Set([...loadCompletedWeaknessDays(), ...backup.completedDays])).sort()));
     if (!localStorage.getItem(MNEMONIC_PROFILE_NAME_KEY) && typeof backup.profileName === "string") localStorage.setItem(MNEMONIC_PROFILE_NAME_KEY, backup.profileName.slice(0, 30));
+    saveElementGuideProgress(mergeElementGuideProgress(loadElementGuideProgress(), backup.elementGuideProgress ?? emptyElementGuideProgress()));
   } else {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(backup.library.slice(0, 100)));
     localStorage.setItem(DAILY_KEY, JSON.stringify(progress));
     localStorage.setItem(COMPLETED_DAYS_KEY, JSON.stringify(backup.completedDays));
     if (typeof backup.profileName === "string") localStorage.setItem(MNEMONIC_PROFILE_NAME_KEY, backup.profileName.slice(0, 30));
+    saveElementGuideProgress(backup.elementGuideProgress ?? emptyElementGuideProgress());
   }
   localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
   return backup;

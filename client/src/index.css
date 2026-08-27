@@ -78,6 +78,10 @@
 .rpc-authority-badge { position: absolute; top: 56px; left: 20px; display: flex; align-items: center; gap: 6px; color: #8ba2a5; background: rgba(3,14,19,.86); border: 1px solid #29474d; padding: 6px 9px; font-size: 9px; letter-spacing: .08em; }
 .rpc-authority-badge.server { color: #83f0da; border-color: #2f8d7b; box-shadow: inset 2px 0 #55e6c1; }
 .rpc-authority-badge.connecting { color: #e9c67c; }.rpc-authority-badge.error { color: #ff8da2; border-color: #83394c; }
+.rpc-authority-badge.reconnecting { color: #ffd27c; border-color: #876225; animation: rpcPulse 1.2s ease-in-out infinite; }
+.rpc-latency { position: absolute; top: 56px; right: 20px; z-index: 4; display: flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid #29474d; background: rgba(3,14,19,.86); color: #81999d; font-size: 9px; letter-spacing: .06em; }
+.rpc-latency i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 7px currentColor; }.rpc-latency.good { color: #72e4c9; border-color: #2f7569; }.rpc-latency.fair { color: #f0c46c; border-color: #745d2b; }.rpc-latency.slow { color: #f28299; border-color: #74384a; }
+@keyframes rpcPulse { 50% { opacity: .55; } }
 .rpc-objective { position: absolute; top: 18px; right: 20px; width: min(430px,calc(100% - 210px)); background: rgba(5,20,27,.9); border: 1px solid #2b4a4f; border-left: 3px solid var(--player); padding: 14px 16px; backdrop-filter: blur(8px); }
 .rpc-objective small { color: #6fbfad; display: block; font-size: 10px; letter-spacing: .1em; }
 .rpc-objective>b { display: block; margin: 5px 0 11px; }
@@ -108,6 +112,7 @@
 .rpc-room-code button { padding: 6px 8px; font-size: 10px; }
 .rpc-identity-note { display: flex; align-items: center; gap: 6px; margin: 8px 0; padding: 7px 9px; border: 1px solid #29474d; background: #091b21; color: #829a9d; font-size: 9px; letter-spacing: .03em; }
 .rpc-identity-note.anonymous,.rpc-identity-note.authenticated { color: #9ce3d5; border-color: #2d766a; }
+.rpc-identity-note.captcha { color: #e8c979; border-color: #76622c; }
 .rpc-identity-note.error { color: #f0a3b2; border-color: #80384a; }
 .rpc-party>small { color: #779194; display: flex; align-items: center; gap: 5px; margin-bottom: 7px; }
 .rpc-party>div { display: grid; grid-template-columns: 29px 1fr auto; gap: 8px; align-items: center; border-top: 1px solid #19343a; padding: 7px 0; }
@@ -118,6 +123,11 @@
 .rpc-party>div.empty>span { border: 1px dashed #527076; background: transparent; color: #80989a; }
 .rpc-network-note { color: #829a9d; background: #102e33; border-left: 2px solid #d8a653; padding: 8px; font-size: 9px; line-height: 1.55; margin: 10px 0 0; }
 .rpc-network-note.success { color: #9ed3c9; border-left-color: #55d6bd; }.rpc-network-note.error { color: #eeb0bc; border-left-color: #dc6078; }
+.rpc-respawn { position: absolute; inset: 0; z-index: 7; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: #ffd9df; background: radial-gradient(circle,rgba(103,21,47,.52),rgba(3,12,17,.82)); backdrop-filter: blur(3px); pointer-events: none; }
+.rpc-respawn b { font-family: Georgia,serif; font-size: 25px; }.rpc-respawn span { color: #eaa7b5; font-size: 11px; letter-spacing: .05em; }
+.rpc-captcha-backdrop { z-index: 30; }
+.rpc-captcha-card { width: min(420px,calc(100vw - 30px)); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px; border: 1px solid #377a70; background: #081b20; color: #dffaf4; box-shadow: 0 24px 80px rgba(0,0,0,.55); text-align: center; }
+.rpc-captcha-card > svg { color: #65e3ca; }.rpc-captcha-card small { color: #6ccfbd; letter-spacing: .16em; }.rpc-captcha-card h2 { margin: 0; font-family: Georgia,serif; font-size: 24px; }.rpc-captcha-card p { margin: 0 0 8px; color: #8da7aa; font-size: 11px; line-height: 1.7; }
 .rpc-quest-card,.rpc-animation-card { padding: 14px; }
 .rpc-quest-card header { display: flex; justify-content: space-between; align-items: center; }
 .rpc-quest-card header small,.rpc-animation-card>small { color: #cf7589; letter-spacing: .08em; font-size: 10px; }
@@ -177,6 +187,7 @@
   .rpc-topbar>a { font-size: 0; }.rpc-topbar>a svg { width: 20px; height: 20px; }.rpc-brand b { font-size: 14px; }
   .rpc-viewport { height: 64vh; min-height: 490px; }.rpc-engine-badge { top: 10px; left: 10px; }
   .rpc-authority-badge { top: 44px; left: 10px; }
+  .rpc-latency { top: 44px; right: 10px; }
   .rpc-objective { top: 48px; left: 10px; right: 10px; width: auto; }.rpc-objective>div { overflow: hidden; }.rpc-objective span { white-space: nowrap; font-size: 8px; padding: 3px 4px; }
   .rpc-action-buttons button { font-size: 0; padding: 10px; }.rpc-action-buttons button svg { width: 20px; height: 20px; }
   .rpc-sidebar { display: block; padding: 10px; }.rpc-sidebar section { margin-bottom: 10px; }

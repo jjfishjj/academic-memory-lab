@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { completeDailyWeaknessItem, createMnemonicBackup, filterAndSortMnemonicEntries, loadDailyWeaknessProgress, loadMnemonicLibrary, mnemonicSubjectOf, previewMnemonicBackup, ratingTrend, removeMnemonicEntryById, restoreMnemonicBackup, saveMnemonicEntry, selectWeakMnemonicEntries, subjectRatingTrends, updateMnemonicEntry, weaknessStreak, weeklyMnemonicSummary, weeklyWeakMnemonicEntries } from "./mnemonicLibrary";
+import { loadElementGuideProgress } from "./elementGuideProgress";
 
 const entry = {
   itemId: "b1", term: "粒線體", hint: "產生 ATP", styleId: "homophone", styleName: "諧音梗",
@@ -101,8 +102,9 @@ describe("口訣庫狀態", () => {
 
   it("JSON 備份包含收藏、筆記、評分、每日進度與完成日期", () => {
     saveMnemonicEntry({ ...entry, note: "我的筆記", ratingHistory: [{ rating: 2, at: "2026-08-14T10:00:00Z" }] });
+    localStorage.setItem("memodesk-element-guide-progress-v1", JSON.stringify({ routes: { "period-1": { completedAt: "2026-08-14T12:00:00Z", completions: 1, bestQuizScore: 2 } } }));
     const backup = createMnemonicBackup(loadMnemonicLibrary(), new Date(2026, 7, 15));
-    expect(backup).toMatchObject({ version: 1, library: [{ note: "我的筆記" }], dailyProgress: { date: "2026-08-15" }, completedDays: [] });
+    expect(backup).toMatchObject({ version: 1, library: [{ note: "我的筆記" }], dailyProgress: { date: "2026-08-15" }, completedDays: [], elementGuideProgress: { routes: { "period-1": { bestQuizScore: 2 } } } });
   });
 
   it("可還原合法 JSON 備份並拒絕錯誤格式", () => {
@@ -111,7 +113,19 @@ describe("口訣庫狀態", () => {
     localStorage.clear();
     restoreMnemonicBackup(backup);
     expect(loadMnemonicLibrary()[0].note).toBe("還原筆記");
+    expect(loadElementGuideProgress().routes).toEqual({});
     expect(() => restoreMnemonicBackup({ version: 2 })).toThrow("不是支援");
+  });
+
+  it("合併 JSON 備份時保留導覽路線的較高完成次數與測驗分數", () => {
+    localStorage.setItem("memodesk-element-guide-progress-v1", JSON.stringify({ routes: { "group-1": { completedAt: "2026-08-20T00:00:00Z", completions: 3, bestQuizScore: 2 } } }));
+    const backup = createMnemonicBackup();
+    backup.elementGuideProgress = { routes: { "group-1": { completedAt: "2026-08-21T00:00:00Z", completions: 1, bestQuizScore: 5 }, "period-2": { completedAt: "2026-08-21T00:00:00Z", completions: 1, bestQuizScore: 4 } } };
+    restoreMnemonicBackup(backup, "merge");
+    expect(loadElementGuideProgress().routes).toMatchObject({
+      "group-1": { completedAt: "2026-08-21T00:00:00Z", completions: 3, bestQuizScore: 5 },
+      "period-2": { completions: 1, bestQuizScore: 4 },
+    });
   });
 
   it("匯入前會計算差異，智慧合併保留本機獨有資料並採用較新版本", () => {

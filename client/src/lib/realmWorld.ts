@@ -36,6 +36,7 @@ export type RealmMember = {
   health: number;
   dodging_until: string | null;
   last_hit_at: string | null;
+  respawn_at: string | null;
 };
 
 type WorldEnvelope = {
@@ -45,7 +46,7 @@ type WorldEnvelope = {
   is_owner: boolean;
 };
 
-export type RealmAuthorityStatus = "connecting" | "server" | "local" | "error";
+export type RealmAuthorityStatus = "connecting" | "reconnecting" | "server" | "local" | "error";
 
 const localInitial = (room: string, actorId: string): RealmWorld => ({
   room_code: room,
@@ -78,6 +79,7 @@ const localMember = (actorId: string, name: string): RealmMember => ({
   health: 100,
   dodging_until: null,
   last_hit_at: null,
+  respawn_at: null,
 });
 
 function serverMessage(error: unknown) {
@@ -99,18 +101,22 @@ function serverMessage(error: unknown) {
   return raw;
 }
 
-export type RealmIdentityStatus = "connecting" | "anonymous" | "authenticated" | "local" | "error";
+export type RealmIdentityStatus = "connecting" | "captcha" | "anonymous" | "authenticated" | "local" | "error";
+
+export const realmTurnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() || "";
 
 let identityPromise: Promise<{ id: string; anonymous: boolean }> | null = null;
 
-async function ensureRealmIdentity() {
+async function ensureRealmIdentity(captchaToken?: string) {
   if (!supabase) throw new Error("Supabase 尚未設定");
   const { data: existing, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
   if (existing.session?.user) {
     return { id: existing.session.user.id, anonymous: Boolean(existing.session.user.is_anonymous) };
   }
-  const { data, error } = await supabase.auth.signInAnonymously();
+  const { data, error } = await supabase.auth.signInAnonymously(
+    captchaToken ? { options: { captchaToken } } : undefined,
+  );
   if (error) throw error;
   if (!data.user) throw new Error("anonymous identity was not created");
   return { id: data.user.id, anonymous: true };
@@ -122,6 +128,24 @@ export function useRealmIdentity() {
   const [status, setStatus] = useState<RealmIdentityStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
 
+  const acceptIdentity = useCallback((identity: { id: string; anonymous: boolean }) => {
+    setActorId(identity.id);
+    setStatus(identity.anonymous ? "anonymous" : "authenticated");
+    setError(null);
+  }, []);
+
+  const verifyCaptcha = useCallback(async (captchaToken: string) => {
+    setStatus("connecting");
+    setError(null);
+    try {
+      const identity = await ensureRealmIdentity(captchaToken);
+      acceptIdentity(identity);
+    } catch (reason) {
+      setStatus("error");
+      setError(serverMessage(reason));
+    }
+  }, [acceptIdentity]);
+
   useEffect(() => {
     sessionStorage.setItem("realm-pc-local-actor", fallback.current);
     if (!isSupabaseConfigured || !supabase) {
@@ -130,21 +154,29 @@ export function useRealmIdentity() {
       return;
     }
     let cancelled = false;
-    identityPromise ??= ensureRealmIdentity().finally(() => { identityPromise = null; });
-    void identityPromise.then(identity => {
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
       if (cancelled) return;
-      setActorId(identity.id);
-      setStatus(identity.anonymous ? "anonymous" : "authenticated");
-      setError(null);
+      if (sessionError) throw sessionError;
+      if (data.session?.user) {
+        acceptIdentity({ id: data.session.user.id, anonymous: Boolean(data.session.user.is_anonymous) });
+        return;
+      }
+      if (realmTurnstileSiteKey) {
+        setStatus("captcha");
+        return;
+      }
+      identityPromise ??= ensureRealmIdentity().finally(() => { identityPromise = null; });
+      return identityPromise.then(identity => { if (!cancelled) acceptIdentity(identity); });
     }).catch(reason => {
-      if (cancelled) return;
-      setStatus("error");
-      setError(serverMessage(reason));
+      if (!cancelled) {
+        setStatus("error");
+        setError(serverMessage(reason));
+      }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [acceptIdentity]);
 
-  return { actorId, status, error };
+  return { actorId, status, error, verifyCaptcha, protectedByTurnstile: Boolean(realmTurnstileSiteKey) };
 }
 
 export function useRealmWorld(room: string, actorId: string | null, name: string, connected: boolean) {
@@ -156,6 +188,9 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
   const [isOwner, setIsOwner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const latestPose = useRef({ x: 0, z: 8, ry: 180, action: "idle" });
   const syncBusy = useRef(false);
 
@@ -176,6 +211,9 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
   useEffect(() => {
     if (!connected || !actorId) return;
     let cancelled = false;
+    let joined = false;
+    let retryTimer: number | null = null;
+    let attempt = 0;
     setError(null);
 
     if (!isSupabaseConfigured || !supabase) {
@@ -197,9 +235,17 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
           if (!cancelled) setWorld(payload.new as RealmWorld);
         },
       )
-      .subscribe();
+      .subscribe(channelStatus => {
+        if (cancelled) return;
+        if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(channelStatus)) {
+          setStatus("reconnecting");
+        } else if (channelStatus === "SUBSCRIBED" && joined) {
+          setStatus("server");
+        }
+      });
 
     const join = async () => {
+      setStatus(attempt === 0 ? "connecting" : "reconnecting");
       const { data, error: joinError } = await client.rpc("realm_join_world", {
         p_room_code: room,
         p_display_name: name,
@@ -208,20 +254,39 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
       if (cancelled) return;
       const envelope = data as WorldEnvelope;
       applyEnvelope(envelope);
+      joined = true;
+      attempt = 0;
+      setReconnectAttempt(0);
       setStatus("server");
     };
 
-    void join().catch(reason => {
-      if (cancelled) return;
-      setStatus("error");
-      setError(serverMessage(reason));
-    });
+    const scheduleJoin = (reason?: unknown) => {
+      if (cancelled || retryTimer !== null) return;
+      const message = reason && typeof reason === "object" && "message" in reason ? String((reason as { message: unknown }).message) : "";
+      if (message.includes("room is full") || message.includes("invalid room") || message.includes("authentication required")) {
+        setStatus("error");
+        setError(serverMessage(reason));
+        return;
+      }
+      attempt += 1;
+      setReconnectAttempt(attempt);
+      setStatus("reconnecting");
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        void join().catch(scheduleJoin);
+      }, Math.min(5000, 500 * 2 ** Math.min(attempt - 1, 3)));
+    };
+
+    void join().catch(scheduleJoin);
+    const onOnline = () => { if (!joined) scheduleJoin(); };
+    window.addEventListener("online", onOnline);
 
     const heartbeat = window.setInterval(() => {
       if (syncBusy.current) return;
       syncBusy.current = true;
       const pose = latestPose.current;
       void (async () => {
+        const startedAt = performance.now();
         try {
           const { data, error: syncError } = await client.rpc("realm_sync_player", {
             p_room_code: room,
@@ -230,8 +295,24 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
             p_ry: pose.ry,
             p_motion: pose.action,
           });
-          if (!cancelled && !syncError && data) applyEnvelope(data as WorldEnvelope);
-          if (!cancelled && syncError && !String(syncError.message).includes("movement rejected")) setError(serverMessage(syncError));
+          const roundTrip = Math.max(1, Math.round(performance.now() - startedAt));
+          if (!cancelled && !syncError && data) {
+            applyEnvelope(data as WorldEnvelope);
+            setLatencyMs(current => current === null ? roundTrip : Math.round(current * 0.72 + roundTrip * 0.28));
+            setLastSyncedAt(Date.now());
+            setError(null);
+            setStatus("server");
+          }
+          if (!cancelled && syncError && !String(syncError.message).includes("movement rejected")) {
+            if (String(syncError.message).includes("has not joined")) {
+              joined = false;
+              scheduleJoin(syncError);
+            } else {
+              setError(serverMessage(syncError));
+            }
+          }
+        } catch (reason) {
+          if (!cancelled) scheduleJoin(reason);
         } finally {
           syncBusy.current = false;
         }
@@ -241,6 +322,8 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
     return () => {
       cancelled = true;
       window.clearInterval(heartbeat);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      window.removeEventListener("online", onOnline);
       void client.removeChannel(channel);
     };
   }, [room, actorId, name, connected, applyEnvelope]);
@@ -292,5 +375,5 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
     }
   }, [actorId, name, pending, room, safeActor, applyEnvelope]);
 
-  return { world, self, status, memberCount, isOwner, error, pending, act, syncPose };
+  return { world, self, status, memberCount, isOwner, error, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt };
 }

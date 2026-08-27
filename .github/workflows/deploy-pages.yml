@@ -47,6 +47,7 @@ jobs:
           GITHUB_PAGES: "1"
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
           VITE_MNEMONIC_API_URL: ${{ vars.VITE_MNEMONIC_API_URL || 'https://academic-memory-lab-api.vercel.app/api/mnemonics' }}
 
       - name: Add SPA fallback

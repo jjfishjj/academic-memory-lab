@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import * as pc from "playcanvas";
+import { Turnstile } from "@marsidev/react-turnstile";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -16,12 +17,12 @@ import {
   Wind,
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { useRealmIdentity, useRealmWorld } from "@/lib/realmWorld";
+import { realmTurnstileSiteKey, useRealmIdentity, useRealmWorld } from "@/lib/realmWorld";
 
 type Vec = { x: number; y: number; z: number; ry: number };
 type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action?: string };
 type NetPacket = { type: "state" | "leave"; peer: Peer };
-type GameApi = { attack: () => void; dodge: () => void; hit: () => void; interact: () => void; move: (key: string, down: boolean) => void };
+type GameApi = { attack: () => void; dodge: () => void; hit: () => void; teleport: (x: number, z: number) => void; interact: () => void; move: (key: string, down: boolean) => void };
 type GameProps = {
   playerName: string;
   playerColor: string;
@@ -299,7 +300,14 @@ function PlayCanvasWorld({
       if (down) { keys.add(key); step(key); }
       else keys.delete(key);
     };
-    registerApi({ attack, dodge, hit: () => setAction("hit", 420), interact, move });
+    registerApi({
+      attack,
+      dodge,
+      hit: () => setAction("hit", 420),
+      teleport: (x, z) => { player.root.setPosition(x, 0, z); setAction("idle", 200); },
+      interact,
+      move,
+    });
 
     const down = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -434,13 +442,16 @@ export default function RealmPlayCanvas() {
   const color = useMemo(() => PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)], []);
   const identityReady = Boolean(identity.actorId) && identity.status !== "error";
   const { peers, transport, updatePose } = useRoom(room, name, color, connected && identityReady, actorId);
-  const { world, self, status: authorityStatus, memberCount, isOwner, error: worldError, pending, act, syncPose } = useRealmWorld(room, identity.actorId, name, connected && identityReady);
+  const { world, self, status: authorityStatus, memberCount, isOwner, error: worldError, pending, act, syncPose, latencyMs, reconnectAttempt, lastSyncedAt } = useRealmWorld(room, identity.actorId, name, connected && identityReady);
   const authorityError = identity.error ?? worldError;
+  const effectiveAuthorityStatus = identity.status === "error" ? "error" : authorityStatus;
+  const actionsReady = effectiveAuthorityStatus === "server" || effectiveAuthorityStatus === "local";
   const api = useRef<GameApi | null>(null);
   const [nearNpc, setNearNpc] = useState(false);
   const [dialogueDismissed, setDialogueDismissed] = useState(false);
   const [battleLog, setBattleLog] = useState("前往紅色霧魘巡邏區，先完成戰鬥。 ");
   const [copied, setCopied] = useState(false);
+  const [respawnSeconds, setRespawnSeconds] = useState(0);
   const enemyHealth = world.enemy_health;
   const enemyDefeated = enemyHealth <= 0;
   const dialogueOpen = ["dialogue", "diplomacy"].includes(world.quest_stage) && !dialogueDismissed;
@@ -469,8 +480,20 @@ export default function RealmPlayCanvas() {
 
   useEffect(() => {
     if (health < previousHealth.current) api.current?.hit();
+    if (previousHealth.current === 0 && health > 0) api.current?.teleport(self.x, self.z);
     previousHealth.current = health;
-  }, [health]);
+  }, [health, self.x, self.z]);
+
+  useEffect(() => {
+    if (health > 0 || !self.respawn_at) {
+      setRespawnSeconds(0);
+      return;
+    }
+    const update = () => setRespawnSeconds(Math.max(0, (new Date(self.respawn_at!).getTime() - Date.now()) / 1000));
+    update();
+    const timer = window.setInterval(update, 100);
+    return () => window.clearInterval(timer);
+  }, [health, self.respawn_at]);
 
   useEffect(() => {
     setDialogueDismissed(false);
@@ -481,6 +504,7 @@ export default function RealmPlayCanvas() {
     else if (world.last_action === "enemy_hit") setBattleLog(`${world.last_combat_result}。霧魘正鎖定 ${world.enemy_target_name ?? "隊伍"}。`);
     else if (world.last_action === "enemy_evaded") setBattleLog(`${world.last_combat_result}！伺服器已判定本次攻擊無效。`);
     else if (world.last_action === "dodge") setBattleLog(`${actor} 進入 0.7 秒伺服器閃避窗口。`);
+    else if (world.last_action === "player_revived") setBattleLog(`${actor} 已由伺服器復活並返回迎賓台。`);
     else if (world.last_action === "open_dialogue") setBattleLog(`${actor} 代表隊伍開啟了沈蘭舟的共同對話。`);
     else if (world.last_action.startsWith("choose_branch:")) setBattleLog(`${actor} 選擇了共同開場立場，外交局勢已同步。`);
     else if (world.last_action.startsWith("skill:")) setBattleLog(world.won ? `${actor} 完成外交協定，全隊通關！` : `${actor} 施放外交技能，信任 ${world.trust}／緊張 ${world.tension}。`);
@@ -544,10 +568,11 @@ export default function RealmPlayCanvas() {
             registerApi={registerApi}
           />
           <div className="rpc-engine-badge"><i /> PLAYCANVAS ENGINE 2.21</div>
-          <div className={`rpc-authority-badge ${authorityStatus}`}>
+          <div className={`rpc-authority-badge ${effectiveAuthorityStatus}`}>
             <Shield size={12} />
-            {authorityStatus === "server" ? `SERVER AUTH · v${world.version}` : authorityStatus === "connecting" ? "連接權威世界…" : authorityStatus === "local" ? "本機模擬" : "同步錯誤"}
+            {effectiveAuthorityStatus === "server" ? `SERVER AUTH · v${world.version}` : effectiveAuthorityStatus === "reconnecting" ? `重新連線 · ${reconnectAttempt}` : effectiveAuthorityStatus === "connecting" ? "連接權威世界…" : effectiveAuthorityStatus === "local" ? "本機模擬" : "身分驗證失敗"}
           </div>
+          <div className={`rpc-latency ${latencyMs === null ? "waiting" : latencyMs < 100 ? "good" : latencyMs < 220 ? "fair" : "slow"}`}><Radio size={12} />{latencyMs === null ? "PING --" : `PING ${latencyMs}ms`}{lastSyncedAt && Date.now() - lastSyncedAt < 1500 ? <i /> : null}</div>
           <div className="rpc-objective">
             <small>霧港協定 · 垂直切片</small>
             <b>{won ? "外交協定已簽署" : enemyDefeated ? "與沈蘭舟交涉" : "淨化巡邏霧魘"}</b>
@@ -556,25 +581,27 @@ export default function RealmPlayCanvas() {
           <div className="rpc-log">{battleLog}</div>
           <div className="rpc-controls"><span>WASD 移動</span><span>J 攻擊</span><span>Space 閃避</span><span>E 交談</span></div>
           <div className="rpc-action-buttons">
-            <button disabled={pending || authorityStatus === "connecting" || health <= 0} onClick={() => api.current?.attack()}><Swords size={18} />攻擊</button>
-            <button disabled={pending || health <= 0} onClick={() => api.current?.dodge()}><Wind size={18} />閃避</button>
-            <button disabled={pending || !nearNpc || !enemyDefeated} onClick={() => api.current?.interact()}><MessageCircle size={18} />交談</button>
+            <button disabled={pending || !actionsReady || health <= 0} onClick={() => api.current?.attack()}><Swords size={18} />攻擊</button>
+            <button disabled={pending || !actionsReady || health <= 0} onClick={() => api.current?.dodge()}><Wind size={18} />閃避</button>
+            <button disabled={pending || !actionsReady || !nearNpc || !enemyDefeated} onClick={() => api.current?.interact()}><MessageCircle size={18} />交談</button>
           </div>
           <div className="rpc-dpad">
             {[["▲", "w"], ["◀", "a"], ["▼", "s"], ["▶", "d"]].map(([label, key]) => <button key={key} onPointerDown={() => api.current?.move(key, true)} onPointerUp={() => api.current?.move(key, false)} onPointerLeave={() => api.current?.move(key, false)}>{label}</button>)}
           </div>
+          {health <= 0 && <div className="rpc-respawn"><Heart size={30} /><b>靈脈耗盡</b><span>{respawnSeconds > 0 ? `${respawnSeconds.toFixed(1)} 秒後由伺服器復活` : "正在重返迎賓台…"}</span></div>}
         </div>
 
         <aside className="rpc-sidebar">
           <section className="rpc-room">
-            <header><div><Radio size={17} /><b>權威共同世界</b></div><span className={authorityStatus === "server" ? "online" : ""}>{authorityStatus === "server" ? "伺服器裁決" : authorityStatus === "connecting" ? "連線中" : authorityStatus === "local" ? "本機模擬" : "需要重連"}</span></header>
+            <header><div><Radio size={17} /><b>權威共同世界</b></div><span className={effectiveAuthorityStatus === "server" ? "online" : ""}>{effectiveAuthorityStatus === "server" ? "伺服器裁決" : effectiveAuthorityStatus === "reconnecting" ? "自動重連" : effectiveAuthorityStatus === "connecting" ? "連線中" : effectiveAuthorityStatus === "local" ? "本機模擬" : "需要設定"}</span></header>
             <div className="rpc-room-form"><input aria-label="玩家名稱" value={draftName} maxLength={14} onChange={event => setDraftName(event.target.value)} /><input aria-label="房號" value={draftRoom} maxLength={12} onChange={event => setDraftRoom(event.target.value.toUpperCase())} /><button onClick={joinRoom}><LogIn size={15} />加入</button></div>
             <div className="rpc-room-code"><div><small>房號</small><b>{room}</b></div><button onClick={copyInvite}><Copy size={14} />{copied ? "已複製" : "邀請"}</button></div>
-            <p className={`rpc-identity-note ${identity.status}`}><Shield size={13} />{identity.status === "anonymous" ? `匿名玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "authenticated" ? `帳號玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "local" ? "本機臨時身分" : identity.status === "error" ? identity.error : "正在取得安全玩家身分…"}</p>
+            <p className={`rpc-identity-note ${identity.status}`}><Shield size={13} />{identity.status === "anonymous" ? `匿名玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "authenticated" ? `帳號玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "captcha" ? "等待 Turnstile 真人驗證" : identity.status === "local" ? "本機臨時身分" : identity.status === "error" ? identity.error : "正在取得安全玩家身分…"}</p>
             <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{name.slice(0, 1)}</span><b>{name}</b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{peer.name.slice(0, 1)}</span><b>{peer.name}</b><em>{peer.action === "run" ? "移動中" : "在線"}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
-            {authorityStatus === "local" && <p className="rpc-network-note">目前為本機狀態機；設定 Supabase 後會自動切換成資料庫權威裁決。</p>}
-            {authorityStatus === "error" && <p className="rpc-network-note error">{authorityError} 請更換房號後重新加入。</p>}
-            {authorityStatus === "server" && <p className="rpc-network-note success">身分、位置、距離、命中、閃避與敵人 AI 由伺服器裁決；動畫透過 {transport === "supabase" ? "Realtime" : "本機頻道"} 平滑呈現。</p>}
+            {effectiveAuthorityStatus === "local" && <p className="rpc-network-note">目前為本機狀態機；設定 Supabase 後會自動切換成資料庫權威裁決。</p>}
+            {effectiveAuthorityStatus === "error" && <p className="rpc-network-note error">{authorityError} 完成 Auth 設定後重新整理頁面。</p>}
+            {effectiveAuthorityStatus === "reconnecting" && <p className="rpc-network-note">連線中斷，正在保留匿名 session 並重新加入房間（第 {reconnectAttempt} 次）。</p>}
+            {effectiveAuthorityStatus === "server" && <p className="rpc-network-note success">身分、位置、距離、命中、閃避與敵人 AI 由伺服器裁決；動畫透過 {transport === "supabase" ? "Realtime" : "本機頻道"} 平滑呈現。</p>}
           </section>
 
           <section className="rpc-quest-card">
@@ -603,6 +630,18 @@ export default function RealmPlayCanvas() {
               <div className="rpc-skills">{skills.map((skill, index) => <button disabled={pending} key={skill.name} onClick={() => useSkill(index)}><span>{index + 1}</span><div><b>{skill.name}</b><small>{skill.line}</small></div></button>)}</div>
               <p className="rpc-win-rule">勝利條件：信任 ≥ 82 且緊張 ≤ 25</p>
             </>}
+          </section>
+        </div>
+      )}
+
+      {identity.status === "captcha" && realmTurnstileSiteKey && (
+        <div className="rpc-modal-backdrop rpc-captcha-backdrop">
+          <section className="rpc-captcha-card">
+            <Shield size={30} />
+            <small>PUBLIC PLAYTEST PROTECTION</small>
+            <h2>完成真人驗證後進入語界</h2>
+            <p>Turnstile token 只交給 Supabase Auth，用來建立這台裝置的匿名玩家身分。</p>
+            <Turnstile siteKey={realmTurnstileSiteKey} onSuccess={identity.verifyCaptcha} options={{ theme: "dark", size: "normal" }} />
           </section>
         </div>
       )}

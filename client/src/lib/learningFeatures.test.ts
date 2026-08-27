@@ -93,6 +93,10 @@ describe("integrated learning features", () => {
       "memodesk-element-talent-progress-v1",
       JSON.stringify({ version: 1, talents: { visualBuilder: { xp: 35 } } })
     );
+    localStorage.setItem(
+      "memodesk-element-guide-progress-v1",
+      JSON.stringify({ routes: { "period-1": { completedAt: "2026-08-27T00:00:00Z", completions: 1, bestQuizScore: 2 } } })
+    );
     const snapshot = collectLocalSnapshot();
     localStorage.clear();
     restoreLocalSnapshot(snapshot);
@@ -111,5 +115,8 @@ describe("integrated learning features", () => {
     expect(
       JSON.parse(localStorage.getItem("memodesk-element-talent-progress-v1")!)
     ).toEqual({ version: 1, talents: { visualBuilder: { xp: 35 } } });
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-element-guide-progress-v1")!)
+    ).toEqual({ routes: { "period-1": { completedAt: "2026-08-27T00:00:00Z", completions: 1, bestQuizScore: 2 } } });
   });
 });
