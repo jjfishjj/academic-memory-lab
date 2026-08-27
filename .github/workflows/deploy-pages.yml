@@ -45,8 +45,8 @@ jobs:
         run: pnpm exec vite build
         env:
           GITHUB_PAGES: "1"
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://ycgjzrvfzaqaicvdtagq.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_2Id9lEsecaTadH9INCY31Q_0i3iiBpV' }}
           VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
           VITE_MNEMONIC_API_URL: ${{ vars.VITE_MNEMONIC_API_URL || 'https://academic-memory-lab-api.vercel.app/api/mnemonics' }}
 
