@@ -20,7 +20,7 @@ import {
 import { realmTurnstileSiteKey, useRealmIdentity, useRealmWorld } from "@/lib/realmWorld";
 
 type Vec = { x: number; y: number; z: number; ry: number };
-type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action: string; health: number };
+type Peer = Vec & { id: string; name: string; color: string; seenAt: number; action: string; health: number; role: string; threat: number };
 type NetPacket = { type: "state" | "leave"; peer: Peer };
 type GameApi = { attack: () => void; dodge: () => void; hit: () => void; teleport: (x: number, z: number) => void; interact: () => void; move: (key: string, down: boolean) => void };
 type GameProps = {
@@ -74,7 +74,7 @@ function useLocalRoom(room: string, name: string, color: string, connected: bool
 
     const packet = (type: NetPacket["type"]): NetPacket => ({
       type,
-      peer: { id: actorId, name, color, ...pose.current, seenAt: Date.now(), health: 100 },
+      peer: { id: actorId, name, color, ...pose.current, seenAt: Date.now(), health: 100, role: "diplomat", threat: 0 },
     });
     const send = (type: NetPacket["type"]) => {
       const next = packet(type);
@@ -467,11 +467,18 @@ const branches = [
   { id: "pressure", label: "指出矛盾施壓", text: "這份譯文與現場證據矛盾，請立即交出原始訊息。", trust: 32, tension: 74 },
 ];
 
-const skills = [
-  { id: "mirror", name: "鏡語回譯", line: "The route is compromised—not surrendered. 路線遭到破壞，不代表投降。" },
-  { id: "empathy", name: "文化共感", line: "誤譯讓每一方都受傷；我們先確認共同想保護的人。" },
-  { id: "pressure", name: "威信施壓", line: "以盟約第七條要求各方立即退讓。" },
-];
+const DIPLOMACY_ROLES = [
+  { id: "diplomat", mark: "外", name: "外交官", skill: "accord", skillName: "共識框架", effect: "信任 +12 · 緊張 −8 · 韌性 −13", line: "先確認共同利益，再提出雙方都能簽署的框架。" },
+  { id: "interpreter", mark: "譯", name: "通譯官", skill: "clarify", skillName: "雙向回譯", effect: "信任 +8 · 緊張 −14 · 韌性 −11", line: "逐句回譯 compromised，讓雙方確認真正語意。" },
+  { id: "intelligence", mark: "情", name: "情報官", skill: "evidence", skillName: "證據揭露", effect: "信任 +6 · 緊張 −5 · 韌性 −18", line: "提出路線紀錄與原始電文，擊破錯誤敘事。" },
+] as const;
+
+const NEGOTIATION_PHASES = {
+  opening: "開場試探",
+  contest: "語義攻防",
+  brink: "決勝交鋒",
+  accord: "協定簽署",
+} as const;
 
 export default function RealmPlayCanvas() {
   const identity = useRealmIdentity();
@@ -499,6 +506,8 @@ export default function RealmPlayCanvas() {
       seenAt: Date.now(),
       action: member.motion,
       health: member.health,
+      role: member.diplomatic_role ?? "diplomat",
+      threat: member.diplomatic_threat ?? 0,
     })), [actorId, members]);
   const peers = authorityStatus === "server" ? authorityPeers : localPeers;
   const authorityError = identity.error ?? worldError;
@@ -518,7 +527,10 @@ export default function RealmPlayCanvas() {
   const tension = world.tension;
   const won = world.won;
   const health = self.health;
+  const role = DIPLOMACY_ROLES.find(item => item.id === (self.diplomatic_role ?? "diplomat")) ?? DIPLOMACY_ROLES[0];
+  const roleLocked = world.quest_stage === "diplomacy" && Boolean(self.last_diplomacy_at);
   const previousHealth = useRef(health);
+  const [comboSeconds, setComboSeconds] = useState(0);
   const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${room}`;
   const registerApi = useCallback((value: GameApi | null) => { api.current = value; }, []);
 
@@ -555,6 +567,17 @@ export default function RealmPlayCanvas() {
   }, [health, self.respawn_at]);
 
   useEffect(() => {
+    if (!world.combo_expires_at || world.combo_count <= 0) {
+      setComboSeconds(0);
+      return;
+    }
+    const update = () => setComboSeconds(Math.max(0, (new Date(world.combo_expires_at!).getTime() - Date.now()) / 1000));
+    update();
+    const timer = window.setInterval(update, 100);
+    return () => window.clearInterval(timer);
+  }, [world.combo_count, world.combo_expires_at]);
+
+  useEffect(() => {
     setDialogueDismissed(false);
     const actor = world.last_actor_name || "隊伍";
     if (world.last_action === "world_created") setBattleLog("共同世界已建立。前往巡邏區迎戰霧魘。");
@@ -566,9 +589,10 @@ export default function RealmPlayCanvas() {
     else if (world.last_action === "player_revived") setBattleLog(`${actor} 已由伺服器復活並返回迎賓台。`);
     else if (world.last_action === "open_dialogue") setBattleLog(`${actor} 代表隊伍開啟了沈蘭舟的共同對話。`);
     else if (world.last_action.startsWith("choose_branch:")) setBattleLog(`${actor} 選擇了共同開場立場，外交局勢已同步。`);
-    else if (world.last_action.startsWith("skill:")) setBattleLog(world.won ? `${actor} 完成外交協定，全隊通關！` : `${actor} 施放外交技能，信任 ${world.trust}／緊張 ${world.tension}。`);
+    else if (world.last_action.startsWith("set_role:")) setBattleLog(`${actor} 已選擇使節職業；首招後職業將鎖定。`);
+    else if (world.last_action.startsWith("skill:")) setBattleLog(world.won ? `${actor} 完成外交協定，全隊通關！` : `${world.last_combat_result}｜${world.last_combo}`);
     else if (world.last_action === "reset") setBattleLog(`${actor} 重置了共同世界。`);
-  }, [world.version, world.last_action, world.last_actor_name, world.last_combat_result, world.enemy_health, world.enemy_target_name, world.trust, world.tension, world.won]);
+  }, [world.version, world.last_action, world.last_actor_name, world.last_combat_result, world.last_combo, world.enemy_health, world.enemy_target_name, world.trust, world.tension, world.won]);
 
   useEffect(() => {
     if (authorityError) setBattleLog(authorityError);
@@ -598,8 +622,12 @@ export default function RealmPlayCanvas() {
     void act("choose_branch", item.id);
   }
 
-  function useSkill(index: number) {
-    void act("skill", skills[index].id);
+  function setRole(nextRole: (typeof DIPLOMACY_ROLES)[number]["id"]) {
+    void act("set_role", nextRole);
+  }
+
+  function useSkill() {
+    void act("skill", role.skill);
   }
 
   function copyInvite() {
@@ -675,12 +703,26 @@ export default function RealmPlayCanvas() {
             <div className="rpc-room-code"><div><small>目前房號</small><b>{room}</b></div><div><button onClick={copyInvite}><Copy size={14} />{copied ? "已複製" : "複製"}</button><button aria-label="分享邀請連結" onClick={shareInvite}><Share2 size={14} />分享</button></div></div>
             <label className="rpc-invite-link"><span>邀請連結</span><input readOnly aria-label="邀請連結" value={inviteUrl} onFocus={event => event.currentTarget.select()} /></label>
             <p className={`rpc-identity-note ${identity.status}`}><Shield size={13} />{identity.status === "anonymous" ? `匿名玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "authenticated" ? `帳號玩家已驗證 · ${actorId.slice(0, 8)}` : identity.status === "captcha" ? "等待 Turnstile 真人驗證" : identity.status === "local" ? "本機臨時身分" : identity.status === "error" ? identity.error : "正在取得安全玩家身分…"}</p>
-            <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{name.slice(0, 1)}</span><b>{name}</b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{peer.name.slice(0, 1)}</span><b>{peer.name}</b><em className={peer.health <= 0 ? "down" : ""}>{peer.health <= 0 ? "倒地" : peer.action === "run" ? "移動中" : peer.action === "attack" ? "戰鬥中" : `${peer.health} HP`}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
+            <div className="rpc-party"><small><Users size={14} />隊伍 {Math.min(4, Math.max(memberCount, peers.length + 1))} / 4</small><div><span style={{ background: color }}>{role.mark}</span><b>{name}<small>{role.name}</small></b><em>{isOwner ? "房主" : "你"}</em></div>{peers.map(peer => <div key={peer.id}><span style={{ background: peer.color }}>{DIPLOMACY_ROLES.find(item => item.id === peer.role)?.mark ?? peer.name.slice(0, 1)}</span><b>{peer.name}<small>{DIPLOMACY_ROLES.find(item => item.id === peer.role)?.name ?? "使節"} · 威脅 {peer.threat}</small></b><em className={peer.health <= 0 ? "down" : ""}>{peer.health <= 0 ? "倒地" : peer.action === "run" ? "移動中" : peer.action === "attack" ? "戰鬥中" : `${peer.health} HP`}</em></div>)}{Array.from({ length: Math.max(0, 3 - peers.length) }, (_, index) => <div className="empty" key={index}><span>+</span><b>等待盟友加入</b></div>)}</div>
             {effectiveAuthorityStatus === "local" && <p className="rpc-network-note">目前為本機狀態機；設定 Supabase 後會自動切換成資料庫權威裁決。</p>}
             {effectiveAuthorityStatus === "error" && <p className="rpc-network-note error">{authorityError} 完成 Auth 設定後重新整理頁面。</p>}
             {effectiveAuthorityStatus === "reconnecting" && <p className="rpc-network-note">連線中斷，正在保留匿名 session 並重新加入房間（第 {reconnectAttempt} 次）。</p>}
             {effectiveAuthorityStatus === "server" && <p className="rpc-network-note success">權威成員快照已連線；隊友位置、生命與動作由伺服器回傳並在場景中平滑呈現。</p>}
           </section>
+
+          <section className="rpc-role-card">
+            <header><div><Sparkles size={15} /><b>使節職業</b></div><small>{roleLocked ? "本回合已鎖定" : "首招前可更換"}</small></header>
+            <div className="rpc-role-options">{DIPLOMACY_ROLES.map(item => <button key={item.id} className={role.id === item.id ? "active" : ""} disabled={pending || roleLocked || !actionsReady} onClick={() => setRole(item.id)}><span>{item.mark}</span><b>{item.name}</b><small>{item.skillName}</small></button>)}</div>
+            <p><b>{role.skillName}</b>{role.effect}</p>
+          </section>
+
+          {world.quest_stage === "diplomacy" || world.quest_stage === "complete" ? <section className="rpc-boss-card">
+            <header><div><small>外交 Boss · 灰議長</small><b>{NEGOTIATION_PHASES[world.negotiation_phase]}</b></div><strong>{world.boss_resolve}</strong></header>
+            <i><em style={{ width: `${world.boss_resolve}%` }} /></i>
+            <div className="rpc-combo-line"><span>連攜 ×{world.combo_count}</span><b>{comboSeconds > 0 ? `${comboSeconds.toFixed(1)}s` : "等待接技"}</b></div>
+            <p>{world.last_combo}</p>
+            <footer>施壓目標：<b>{world.boss_target_name ?? "尚未鎖定"}</b></footer>
+          </section> : null}
 
           <section className="rpc-quest-card">
             <header><small>共享敵人 · 霧魘</small><b>{enemyHealth > 0 ? `${enemyHealth}%` : "全隊已淨化"}</b></header>
@@ -703,10 +745,12 @@ export default function RealmPlayCanvas() {
               <blockquote>「商隊把 compromised 譯成『接受妥協』，雙方已開始集結。靈語使，你準備如何開口？」</blockquote>
               <div className="rpc-branches">{branches.map(item => <button disabled={pending} key={item.id} onClick={() => chooseBranch(item)}><b>{item.label}</b><span>「{item.text}」</span></button>)}</div>
             </> : <>
-              <div className="rpc-duel-title"><div><small>全隊外交技能戰 · v{world.version}</small><h3>校正「compromised」的邊境語意</h3></div><button disabled={pending} onClick={() => void act("choose_branch", "verify")}>採用雙向回譯</button></div>
+              <div className="rpc-duel-title"><div><small>全隊外交 Boss · {NEGOTIATION_PHASES[world.negotiation_phase]} · v{world.version}</small><h3>灰議長：校正「compromised」的邊境語意</h3></div><strong>{world.boss_resolve} 韌性</strong></div>
               <div className="rpc-meters"><label>信任 <i><em style={{ width: `${trust}%` }} /></i><b>{trust}</b></label><label>緊張 <i className="danger"><em style={{ width: `${tension}%` }} /></i><b>{tension}</b></label></div>
-              <div className="rpc-skills">{skills.map((skill, index) => <button disabled={pending} key={skill.name} onClick={() => useSkill(index)}><span>{index + 1}</span><div><b>{skill.name}</b><small>{skill.line}</small></div></button>)}</div>
-              <p className="rpc-win-rule">勝利條件：信任 ≥ 82 且緊張 ≤ 25</p>
+              <div className="rpc-role-strip">{DIPLOMACY_ROLES.map(item => <button key={item.id} className={role.id === item.id ? "active" : ""} disabled={pending || roleLocked} onClick={() => setRole(item.id)}><span>{item.mark}</span>{item.name}</button>)}</div>
+              <div className="rpc-skills"><button disabled={pending || !actionsReady} onClick={useSkill}><span>{role.mark}</span><div><b>{role.skillName} · {role.name}</b><small>{role.line}</small><em>{role.effect}</em></div></button></div>
+              <div className="rpc-boss-callout"><span>連攜 ×{world.combo_count}</span><b>{comboSeconds > 0 ? `${comboSeconds.toFixed(1)} 秒內由不同職業接技` : "等待隊友起手"}</b><small>{world.last_combo} · 施壓目標：{world.boss_target_name ?? "尚未鎖定"}</small></div>
+              <p className="rpc-win-rule">勝利條件：Boss 韌性歸零、信任 ≥ 82、緊張 ≤ 25</p>
             </>}
           </section>
         </div>

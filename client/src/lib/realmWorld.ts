@@ -22,6 +22,15 @@ export type RealmWorld = {
   enemy_target_actor: string | null;
   enemy_target_name: string | null;
   last_combat_result: string;
+  boss_resolve: number;
+  negotiation_phase: "opening" | "contest" | "brink" | "accord";
+  combo_count: number;
+  combo_expires_at: string | null;
+  last_diplomacy_role: string | null;
+  last_combo: string;
+  boss_target_actor: string | null;
+  boss_target_name: string | null;
+  boss_next_pressure_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -37,6 +46,10 @@ export type RealmMember = {
   dodging_until: string | null;
   last_hit_at: string | null;
   respawn_at: string | null;
+  diplomatic_role: "diplomat" | "interpreter" | "intelligence";
+  diplomatic_threat: number;
+  last_diplomacy_skill: string | null;
+  last_diplomacy_at: string | null;
 };
 
 type WorldEnvelope = {
@@ -66,6 +79,15 @@ const localInitial = (room: string, actorId: string): RealmWorld => ({
   enemy_target_actor: null,
   enemy_target_name: null,
   last_combat_result: "none",
+  boss_resolve: 100,
+  negotiation_phase: "opening",
+  combo_count: 0,
+  combo_expires_at: null,
+  last_diplomacy_role: null,
+  last_combo: "等待不同職業接技",
+  boss_target_actor: null,
+  boss_target_name: null,
+  boss_next_pressure_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 });
@@ -81,6 +103,10 @@ const localMember = (actorId: string, name: string): RealmMember => ({
   dodging_until: null,
   last_hit_at: null,
   respawn_at: null,
+  diplomatic_role: "diplomat",
+  diplomatic_threat: 0,
+  last_diplomacy_skill: null,
+  last_diplomacy_at: null,
 });
 
 function serverMessage(error: unknown) {
@@ -98,6 +124,9 @@ function serverMessage(error: unknown) {
   if (raw.includes("dialogue is locked")) return "必須先共同擊敗霧魘，才能開始對話。";
   if (raw.includes("branch selection is locked")) return "目前不能改變 NPC 對話分支。";
   if (raw.includes("diplomacy skill is locked")) return "必須先選擇 NPC 開場立場。";
+  if (raw.includes("invalid diplomatic role")) return "無法選擇這個使節職業。";
+  if (raw.includes("role is locked")) return "談判已開始，本回合不能再更換職業。";
+  if (raw.includes("skill does not match")) return "這項技能不屬於目前職業。";
   if (raw.includes("only the room owner")) return "只有房主可以重置共同世界。";
   return raw;
 }
@@ -343,6 +372,11 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
     setError(null);
     try {
       if (!isSupabaseConfigured || !supabase) {
+        if (action === "set_role" && ["diplomat", "interpreter", "intelligence"].includes(value ?? "")) {
+          const diplomaticRole = value as RealmMember["diplomatic_role"];
+          setSelf(current => ({ ...current, diplomatic_role: diplomaticRole }));
+          setMembers(current => current.map(member => member.actor_id === safeActor ? { ...member, diplomatic_role: diplomaticRole } : member));
+        }
         setWorld(current => {
           const next = { ...current, version: current.version + 1, last_action: `${action}${value ? `:${value}` : ""}`, last_actor_name: name, updated_at: new Date().toISOString() };
           if (action === "attack" && current.quest_stage === "combat") {
@@ -354,11 +388,17 @@ export function useRealmWorld(room: string, actorId: string | null, name: string
             const starts = { listen: [48, 54], verify: [58, 45], pressure: [32, 74] } as const;
             const start = starts[value as keyof typeof starts];
             if (start) { next.dialogue_branch = value as RealmBranch; next.trust = start[0]; next.tension = start[1]; next.quest_stage = "diplomacy"; }
+            next.boss_resolve = 100; next.negotiation_phase = "opening"; next.combo_count = 0; next.last_combo = "等待不同職業接技";
           } else if (action === "skill" && value) {
-            const deltas = { mirror: [27, -22], empathy: [20, -16], pressure: [7, 8] } as const;
-            const delta = deltas[value as keyof typeof deltas];
-            if (delta) { next.trust = Math.min(100, next.trust + delta[0]); next.tension = Math.max(0, Math.min(100, next.tension + delta[1])); }
-            if (next.trust >= 82 && next.tension <= 25) { next.won = true; next.quest_stage = "complete"; }
+            const effects = { accord: [12, -8, 13], clarify: [8, -14, 11], evidence: [6, -5, 18] } as const;
+            const effect = effects[value as keyof typeof effects];
+            if (effect) {
+              next.trust = Math.min(100, next.trust + effect[0]);
+              next.tension = Math.max(0, Math.min(100, next.tension + effect[1]));
+              next.boss_resolve = Math.max(0, next.boss_resolve - effect[2]);
+            }
+            next.negotiation_phase = next.boss_resolve === 0 ? "accord" : next.boss_resolve <= 33 ? "brink" : next.boss_resolve <= 66 ? "contest" : "opening";
+            if (next.boss_resolve === 0 && next.trust >= 82 && next.tension <= 25) { next.won = true; next.quest_stage = "complete"; }
           } else if (action === "reset") {
             return localInitial(room, safeActor);
           }
