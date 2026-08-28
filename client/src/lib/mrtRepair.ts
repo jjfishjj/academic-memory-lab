@@ -9,6 +9,22 @@ export interface MrtRepairResult {
   stationCodes: string[];
   correctCodes: string[];
   accuracy: number;
+  weakBefore?: number;
+  weakAfter?: number;
+}
+
+export type MrtRepairDirection = "code-to-name" | "name-to-code";
+export interface MrtRepairQuestionBlueprint {
+  station: MrtStation;
+  direction: MrtRepairDirection;
+  prompt: string;
+  answer: string;
+}
+
+export interface MrtRepairTrendPoint {
+  date: string;
+  repairRate: number;
+  weakCount: number;
 }
 
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA");
@@ -49,13 +65,60 @@ export function repairQuality(accuracy: number): MrtMnemonicQuality {
   return accuracy >= 0.8 ? "good" : accuracy >= 0.5 ? "okay" : "hard";
 }
 
-export function saveMrtRepairResult(result: MrtRepairResult): void {
-  let history: MrtRepairResult[] = [];
+export function buildMrtRepairQuestions(
+  stations: MrtStation[]
+): MrtRepairQuestionBlueprint[] {
+  return stations.flatMap(station => [
+    {
+      station,
+      direction: "code-to-name" as const,
+      prompt: station.code,
+      answer: station.name,
+    },
+    {
+      station,
+      direction: "name-to-code" as const,
+      prompt: station.name,
+      answer: station.code,
+    },
+  ]);
+}
+
+export function loadMrtRepairHistory(): MrtRepairResult[] {
   try {
-    history = JSON.parse(localStorage.getItem(MRT_REPAIR_HISTORY_KEY) ?? "[]");
+    const value = JSON.parse(
+      localStorage.getItem(MRT_REPAIR_HISTORY_KEY) ?? "[]"
+    );
+    return Array.isArray(value) ? value : [];
   } catch {
-    /* start clean */
+    return [];
   }
+}
+
+export function mrtRepairTrend(
+  history: MrtRepairResult[],
+  now = new Date(),
+  days = 30
+): MrtRepairTrendPoint[] {
+  const earliest = new Date(now);
+  earliest.setHours(0, 0, 0, 0);
+  earliest.setDate(earliest.getDate() - days + 1);
+  return history
+    .filter(
+      item => new Date(`${item.date}T00:00:00`).getTime() >= earliest.getTime()
+    )
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(item => ({
+      date: item.date,
+      repairRate: item.accuracy,
+      weakCount:
+        item.weakAfter ??
+        Math.max(0, item.stationCodes.length - item.correctCodes.length),
+    }));
+}
+
+export function saveMrtRepairResult(result: MrtRepairResult): void {
+  const history = loadMrtRepairHistory();
   localStorage.setItem(
     MRT_REPAIR_HISTORY_KEY,
     JSON.stringify(

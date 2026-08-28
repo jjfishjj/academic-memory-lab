@@ -42,6 +42,8 @@ export interface MrtMnemonicExperiment {
     remembered: boolean;
     answeredAt: string;
   }>;
+  appliedWinner?: 0 | 1;
+  appliedAt?: string;
 }
 
 export interface MrtExperimentRetention {
@@ -214,6 +216,59 @@ export function loadMrtMnemonicExperiments(): MrtMnemonicExperiment[] {
   }
 }
 
+export function winningMrtExperimentVariant(
+  experiment: MrtMnemonicExperiment
+): 0 | 1 | null {
+  const daySeven = [0, 1].map(variant =>
+    experiment.checks.filter(
+      check => check.day === 7 && check.variant === variant
+    )
+  );
+  if (daySeven.some(checks => checks.length === 0)) return null;
+  const daySevenRemembered = daySeven.map(
+    checks => checks.filter(check => check.remembered).length
+  );
+  if (daySevenRemembered[0] !== daySevenRemembered[1])
+    return daySevenRemembered[0] > daySevenRemembered[1] ? 0 : 1;
+  const summary = summarizeMrtExperiments([experiment])[0];
+  return summary.winner;
+}
+
+export function applyReadyMrtExperimentWinners(
+  experiments: MrtMnemonicExperiment[],
+  mnemonics: Record<string, PersonalMrtMnemonic>,
+  now = new Date()
+): {
+  experiments: MrtMnemonicExperiment[];
+  mnemonics: Record<string, PersonalMrtMnemonic>;
+  applied: string[];
+} {
+  const nextMnemonics = { ...mnemonics };
+  const applied: string[] = [];
+  const nextExperiments = experiments.map(experiment => {
+    if (
+      experiment.appliedAt ||
+      now.getTime() - new Date(experiment.startedAt).getTime() < 7 * 86_400_000
+    )
+      return experiment;
+    const winner = winningMrtExperimentVariant(experiment);
+    if (winner === null) return experiment;
+    const current = nextMnemonics[experiment.stationCode];
+    nextMnemonics[experiment.stationCode] = {
+      sound: experiment.variants[winner],
+      favorite: current?.favorite ?? false,
+      quality: current?.quality,
+    };
+    applied.push(experiment.stationCode);
+    return {
+      ...experiment,
+      appliedWinner: winner,
+      appliedAt: now.toISOString(),
+    };
+  });
+  return { experiments: nextExperiments, mnemonics: nextMnemonics, applied };
+}
+
 export function saveMrtMnemonicExperiments(items: MrtMnemonicExperiment[]) {
   localStorage.setItem(MRT_MNEMONIC_EXPERIMENTS_KEY, JSON.stringify(items));
   localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
@@ -284,7 +339,23 @@ export function loadPersonalMrtMnemonics(): Record<
   try {
     const value = localStorage.getItem(PERSONAL_KEY);
     const parsed = value ? JSON.parse(value) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const current = parsed && typeof parsed === "object" ? parsed : {};
+    const settled = applyReadyMrtExperimentWinners(
+      loadMrtMnemonicExperiments(),
+      current
+    );
+    if (settled.applied.length) {
+      localStorage.setItem(PERSONAL_KEY, JSON.stringify(settled.mnemonics));
+      localStorage.setItem(
+        MRT_MNEMONIC_EXPERIMENTS_KEY,
+        JSON.stringify(settled.experiments)
+      );
+      localStorage.setItem(
+        "memodesk-local-updated-at",
+        new Date().toISOString()
+      );
+    }
+    return settled.mnemonics;
   } catch {
     return {};
   }

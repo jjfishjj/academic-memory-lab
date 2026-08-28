@@ -5,6 +5,11 @@ import { MRT_LINES } from "@/lib/mrtData";
 import { loadMrtProgress, type MrtProgress } from "@/lib/mrtProgress";
 import { segmentsForLine } from "@/lib/mrtCourse";
 import { loadPersonalMrtMnemonics } from "@/lib/mrtMnemonics";
+import {
+  loadMrtRepairHistory,
+  mrtRepairTrend,
+  type MrtRepairTrendPoint,
+} from "@/lib/mrtRepair";
 
 const EMPTY: MrtProgress = {
   lines: {},
@@ -17,6 +22,7 @@ const EMPTY: MrtProgress = {
 export default function MrtDashboard() {
   const [progress, setProgress] = useState<MrtProgress>(EMPTY);
   const [hardCodes, setHardCodes] = useState<Set<string>>(new Set());
+  const [repairTrend, setRepairTrend] = useState<MrtRepairTrendPoint[]>([]);
   useEffect(() => {
     setProgress(loadMrtProgress());
     setHardCodes(
@@ -26,6 +32,7 @@ export default function MrtDashboard() {
           .map(([code]) => code)
       )
     );
+    setRepairTrend(mrtRepairTrend(loadMrtRepairHistory()));
   }, []);
   const learned = Object.keys(progress.stations).length;
   const weak = Array.from(
@@ -192,6 +199,54 @@ export default function MrtDashboard() {
           <p className="text-muted-foreground mt-3">
             還沒有弱站資料；完成幾輪練習或將聯想標成「難記」後會自動生成。
           </p>
+        )}
+      </section>
+      <section className="mt-9">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display font-bold text-2xl">
+              最近 30 天修復趨勢
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              綠柱為當日修復率，紅點為完成後仍待修復的站數。
+            </p>
+          </div>
+          {repairTrend.length > 0 && (
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-800">
+              最新 {repairTrend.at(-1)?.repairRate}%
+            </span>
+          )}
+        </div>
+        {repairTrend.length ? (
+          <div className="paper-card p-5 mt-4 overflow-x-auto">
+            <div className="flex items-end gap-3 min-w-max h-56 border-b pb-2">
+              {repairTrend.map(point => (
+                <div
+                  key={point.date}
+                  className="w-12 h-full flex flex-col justify-end items-center gap-1"
+                  title={`${point.date}：修復率 ${point.repairRate}%、仍弱 ${point.weakCount} 站`}
+                >
+                  <span className="text-xs font-black text-red-700">
+                    {point.weakCount}弱
+                  </span>
+                  <div className="w-8 flex-1 flex items-end rounded-t-lg bg-emerald-50 overflow-hidden">
+                    <div
+                      className="w-full rounded-t-lg bg-emerald-500"
+                      style={{ height: `${Math.max(4, point.repairRate)}%` }}
+                    />
+                  </div>
+                  <strong className="text-[10px]">{point.repairRate}%</strong>
+                  <small className="text-[9px] text-muted-foreground">
+                    {point.date.slice(5)}
+                  </small>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="paper-card p-6 mt-4 text-muted-foreground">
+            完成第一輪每日弱站修復後，這裡會開始累積趨勢。
+          </div>
         )}
       </section>
       <section className="mt-9">

@@ -10,6 +10,7 @@ import {
 } from "@/lib/mrtMnemonics";
 import { loadMrtProgress, recordMrtAnswer } from "@/lib/mrtProgress";
 import {
+  buildMrtRepairQuestions,
   repairQuality,
   saveMrtRepairResult,
   selectDailyRepairStations,
@@ -27,35 +28,50 @@ export default function MrtRepair() {
       ),
     []
   );
+  const questions = useMemo(
+    () => buildMrtRepairQuestions(stations),
+    [stations]
+  );
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, boolean>>({});
   const [done, setDone] = useState(false);
-  const current = stations[index];
+  const current = questions[index];
   const options = useMemo(
     () =>
       current
         ? shuffle([
-            current,
+            current.answer,
             ...shuffle(
               ALL_MRT_STATIONS.filter(
-                station => !station.preview && station.code !== current.code
+                station =>
+                  !station.preview && station.code !== current.station.code
               )
-            ).slice(0, 3),
-          ]).map(station => station.name)
+            )
+              .slice(0, 3)
+              .map(station =>
+                current.direction === "code-to-name"
+                  ? station.name
+                  : station.code
+              ),
+          ])
         : [],
     [current]
   );
 
-  const answer = (name: string) => {
+  const resultKey = current
+    ? `${current.station.code}:${current.direction}`
+    : "";
+
+  const answer = (value: string) => {
     if (!current || selected) return;
-    const correct = name === current.name;
-    setSelected(name);
-    setResults(saved => ({ ...saved, [current.code]: correct }));
-    recordMrtAnswer(current, correct);
+    const correct = value === current.answer;
+    setSelected(value);
+    setResults(saved => ({ ...saved, [resultKey]: correct }));
+    recordMrtAnswer(current.station, correct);
   };
   const next = () => {
-    if (index < stations.length - 1) {
+    if (index < questions.length - 1) {
       setIndex(value => value + 1);
       setSelected(null);
       return;
@@ -69,7 +85,8 @@ export default function MrtRepair() {
           const stationProgress = latestProgress.stations[station.code];
           const accuracy = stationProgress?.attempts
             ? stationProgress.correct / stationProgress.attempts
-            : finalResults[station.code]
+            : finalResults[`${station.code}:code-to-name`] &&
+                finalResults[`${station.code}:name-to-code`]
               ? 1
               : 0;
           next[station.code] = {
@@ -82,14 +99,21 @@ export default function MrtRepair() {
         { ...currentItems }
       )
     );
-    const correctCodes = Object.entries(finalResults)
-      .filter(([, correct]) => correct)
-      .map(([code]) => code);
+    const correctCodes = stations
+      .filter(
+        station =>
+          finalResults[`${station.code}:code-to-name`] &&
+          finalResults[`${station.code}:name-to-code`]
+      )
+      .map(station => station.code);
+    const correctAnswers = Object.values(finalResults).filter(Boolean).length;
     saveMrtRepairResult({
       date: new Date().toLocaleDateString("en-CA"),
       stationCodes: stations.map(station => station.code),
       correctCodes,
-      accuracy: Math.round((correctCodes.length / stations.length) * 100),
+      accuracy: Math.round((correctAnswers / questions.length) * 100),
+      weakBefore: stations.length,
+      weakAfter: stations.length - correctCodes.length,
     });
     setDone(true);
   };
@@ -107,16 +131,16 @@ export default function MrtRepair() {
             今日弱站修復完成
           </h1>
           <strong className="block text-5xl mt-5">
-            {correct}/{stations.length}
+            {correct}/{questions.length}
           </strong>
           <p className="text-muted-foreground mt-3">
-            答對站點已重評為好記；答錯站點維持難記並優先排入後續課程。
+            每站兩個方向都答對才算修復；品質已依更新後累積正確率重新評估。
           </p>
           <div className="flex flex-wrap justify-center gap-2 mt-6">
             {stations.map(station => (
               <span
                 key={station.code}
-                className={`rounded-full px-3 py-2 text-sm font-bold ${results[station.code] ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}
+                className={`rounded-full px-3 py-2 text-sm font-bold ${results[`${station.code}:code-to-name`] && results[`${station.code}:name-to-code`] ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}
               >
                 {station.code} {station.name}
               </span>
@@ -151,23 +175,28 @@ export default function MrtRepair() {
       <div className="flex gap-2 mt-6">
         {stations.map((station, stationIndex) => (
           <span
-            key={station.code}
-            className={`h-2 flex-1 rounded-full ${stationIndex < index || results[station.code] !== undefined ? "bg-emerald-500" : stationIndex === index ? "bg-red-500" : "bg-muted"}`}
+            key={`${station.code}-${stationIndex}`}
+            className={`h-2 flex-1 rounded-full ${stationIndex * 2 + 1 < index ? "bg-emerald-500" : stationIndex * 2 <= index ? "bg-red-500" : "bg-muted"}`}
           />
         ))}
       </div>
       {current && (
         <section className="paper-card p-6 sm:p-8 mt-5">
           <span className="text-sm font-bold text-muted-foreground">
-            第 {index + 1}/{stations.length} 題 · {current.lineId}
+            第 {index + 1}/{questions.length} 題 · {current.station.lineId} ·
+            {current.direction === "code-to-name" ? " 站碼→站名" : " 站名→站碼"}
           </span>
           <div className="rounded-2xl bg-primary text-primary-foreground text-center py-9 mt-4">
-            <strong className="text-5xl">{current.code}</strong>
-            <p className="mt-3">這個站碼是哪一站？</p>
+            <strong className="text-5xl">{current.prompt}</strong>
+            <p className="mt-3">
+              {current.direction === "code-to-name"
+                ? "這個站碼是哪一站？"
+                : "這個站名的站碼是？"}
+            </p>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 mt-6">
             {options.map(option => {
-              const correct = option === current.name;
+              const correct = option === current.answer;
               return (
                 <button
                   key={option}
@@ -183,16 +212,19 @@ export default function MrtRepair() {
           {selected && (
             <div className="rounded-xl bg-amber-50 p-4 mt-5">
               <strong>
-                {selected === current.name
+                {selected === current.answer
                   ? "答對了！"
-                  : `正解：${current.name}`}
+                  : `正解：${current.answer}`}
               </strong>
               <p className="text-sm mt-1">
                 聯想：
-                {getMrtMnemonic(current, loadPersonalMrtMnemonics()).sound}
+                {
+                  getMrtMnemonic(current.station, loadPersonalMrtMnemonics())
+                    .sound
+                }
               </p>
               <Button onClick={next} className="rounded-full mt-4">
-                {index === stations.length - 1 ? "完成並重新評估" : "下一站"}
+                {index === questions.length - 1 ? "完成並重新評估" : "下一題"}
               </Button>
             </div>
           )}

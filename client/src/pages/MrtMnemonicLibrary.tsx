@@ -552,6 +552,14 @@ export default function MrtMnemonicLibrary() {
                       A {scores[0]} 次記得 · B {scores[1]} 次記得
                     </span>
                   </div>
+                  {experiment.appliedAt &&
+                    experiment.appliedWinner !== undefined && (
+                      <p className="rounded-lg bg-blue-50 text-blue-800 p-2 mt-3 text-xs font-bold">
+                        第 7 天已自動套用{" "}
+                        {experiment.appliedWinner === 0 ? "A" : "B"}
+                        ，另一版本已淘汰。
+                      </p>
+                    )}
                   {summary?.winner !== null &&
                     summary?.winner !== undefined && (
                       <p className="rounded-lg bg-emerald-50 text-emerald-800 p-2 mt-3 text-xs font-bold">

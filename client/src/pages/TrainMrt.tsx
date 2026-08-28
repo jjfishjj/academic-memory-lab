@@ -16,6 +16,7 @@ import {
   Sparkles,
   TrainFront,
   Volume2,
+  Wrench,
   X,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -372,6 +373,19 @@ export default function TrainMrt() {
                 <strong className="font-display block">個人聯想管理</strong>
                 <span className="text-xs text-muted-foreground">
                   搜尋、排序、修改、收藏與 AI 三種候選
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="/train/mrt/repair"
+              className="paper-card p-4 flex items-center gap-3 group sm:col-span-2 border-red-200 bg-red-50"
+            >
+              <Wrench className="w-7 h-7 text-red-700" />
+              <span className="flex-1">
+                <strong className="font-display block">每日弱站修復</strong>
+                <span className="text-xs text-muted-foreground">
+                  5 站雙向測驗，完成後重新評估聯想品質
                 </span>
               </span>
               <ArrowRight className="w-4 h-4" />
