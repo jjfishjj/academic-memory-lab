@@ -5,9 +5,13 @@ import {
   buildMrtRepairQuestions,
   buildAdaptiveMrtRepairOptions,
   clearMrtRepairConfusion,
+  loadMrtRepairConfusionMasteries,
   loadMrtRepairConfusions,
+  mrtConfusionPracticeQuestionCount,
   mrtRepairGoalStats,
+  mrtRepairConfusionMasteryKey,
   recommendMrtRepairWeeklyGoal,
+  recordMrtConfusionPracticeAnswer,
   recordMrtRepairConfusion,
   summarizeMrtRepairConfusions,
   selectDailyRepairStations,
@@ -163,6 +167,63 @@ describe("MRT weak-station repair", () => {
     clearMrtRepairConfusion(row.key, row.selected);
     expect(
       summarizeMrtRepairConfusions(loadMrtRepairConfusions(), ALL_MRT_STATIONS)
+    ).toEqual([]);
+  });
+
+  it("adapts confusion practice to 4, 8 or 12 questions", () => {
+    expect([1, 2, 3, 5, 6, 20].map(mrtConfusionPracticeQuestionCount)).toEqual([
+      4, 4, 8, 8, 12, 12,
+    ]);
+    const row = {
+      key: "BR06:code-to-name",
+      sourceCode: "BR06",
+      sourceName: "麟光",
+      confusedCode: "BR07",
+      confusedName: "六張犁",
+      direction: "code-to-name" as const,
+      selected: "六張犁",
+      count: 6,
+    };
+    expect(buildMrtConfusionPairQuestions(row, ALL_MRT_STATIONS)).toHaveLength(
+      12
+    );
+  });
+
+  it("lowers confusion weight after four consecutive correct answers", () => {
+    const station = ALL_MRT_STATIONS.find(item => item.code === "BR06")!;
+    const confused = ALL_MRT_STATIONS.find(item => item.code === "BR07")!;
+    const [question] = buildMrtRepairQuestions([station]);
+    recordMrtRepairConfusion(question, confused.name);
+    recordMrtRepairConfusion(question, confused.name);
+    const [row] = summarizeMrtRepairConfusions(
+      loadMrtRepairConfusions(),
+      ALL_MRT_STATIONS
+    );
+    for (let index = 0; index < 3; index += 1)
+      recordMrtConfusionPracticeAnswer(row, true);
+    expect(
+      loadMrtRepairConfusionMasteries()[mrtRepairConfusionMasteryKey(row)].streak
+    ).toBe(3);
+    const reduced = recordMrtConfusionPracticeAnswer(row, true);
+    expect(reduced).toMatchObject({ reduced: true, removed: false });
+    expect(
+      summarizeMrtRepairConfusions(reduced.confusions, ALL_MRT_STATIONS)[0].count
+    ).toBe(1);
+    expect(
+      reduced.masteries[mrtRepairConfusionMasteryKey(row)]
+    ).toMatchObject({ streak: 0, reductions: 1 });
+
+    recordMrtConfusionPracticeAnswer(row, true);
+    recordMrtConfusionPracticeAnswer(row, false);
+    expect(
+      loadMrtRepairConfusionMasteries()[mrtRepairConfusionMasteryKey(row)].streak
+    ).toBe(0);
+    for (let index = 0; index < 3; index += 1)
+      recordMrtConfusionPracticeAnswer(row, true);
+    const graduated = recordMrtConfusionPracticeAnswer(row, true);
+    expect(graduated).toMatchObject({ reduced: true, removed: true });
+    expect(
+      summarizeMrtRepairConfusions(graduated.confusions, ALL_MRT_STATIONS)
     ).toEqual([]);
   });
 

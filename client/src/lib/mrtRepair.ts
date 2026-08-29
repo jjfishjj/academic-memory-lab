@@ -4,6 +4,8 @@ import type { PersonalMrtMnemonic, MrtMnemonicQuality } from "./mrtMnemonics";
 
 export const MRT_REPAIR_HISTORY_KEY = "memodesk-mrt-repair-history";
 export const MRT_REPAIR_CONFUSIONS_KEY = "memodesk-mrt-repair-confusions";
+export const MRT_REPAIR_CONFUSION_MASTERY_KEY =
+  "memodesk-mrt-repair-confusion-mastery";
 export const MRT_REPAIR_WEEKLY_GOAL_KEY = "memodesk-mrt-repair-weekly-goal";
 
 export interface MrtRepairResult {
@@ -30,6 +32,24 @@ export interface MrtRepairTrendPoint {
 }
 
 export type MrtRepairConfusions = Record<string, Record<string, number>>;
+
+export interface MrtRepairConfusionMastery {
+  streak: number;
+  reductions: number;
+  lastAnsweredAt: string;
+}
+
+export type MrtRepairConfusionMasteries = Record<
+  string,
+  MrtRepairConfusionMastery
+>;
+
+export interface MrtRepairConfusionMasteryResult {
+  masteries: MrtRepairConfusionMasteries;
+  confusions: MrtRepairConfusions;
+  reduced: boolean;
+  removed: boolean;
+}
 
 export interface MrtRepairGoalStats {
   todayCompleted: boolean;
@@ -123,7 +143,13 @@ export function buildMrtConfusionPairQuestions(
   const source = stations.find(station => station.code === row.sourceCode);
   const confused = stations.find(station => station.code === row.confusedCode);
   if (!source || !confused) return [];
-  return buildMrtRepairQuestions([source, confused]);
+  const base = buildMrtRepairQuestions([source, confused]);
+  const count = mrtConfusionPracticeQuestionCount(row.count);
+  return Array.from({ length: count }, (_, index) => base[index % base.length]);
+}
+
+export function mrtConfusionPracticeQuestionCount(count: number): 4 | 8 | 12 {
+  return count >= 6 ? 12 : count >= 3 ? 8 : 4;
 }
 
 const confusionKey = (question: MrtRepairQuestionBlueprint) =>
@@ -145,6 +171,64 @@ export function loadMrtRepairConfusions(): MrtRepairConfusions {
   } catch {
     return {};
   }
+}
+
+export function mrtRepairConfusionMasteryKey(row: MrtRepairConfusionRow) {
+  return `${row.key}::${row.selected}`;
+}
+
+export function loadMrtRepairConfusionMasteries(): MrtRepairConfusionMasteries {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(MRT_REPAIR_CONFUSION_MASTERY_KEY) ?? "{}"
+    );
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordMrtConfusionPracticeAnswer(
+  row: MrtRepairConfusionRow,
+  isCorrect: boolean,
+  now = new Date()
+): MrtRepairConfusionMasteryResult {
+  const masteries = loadMrtRepairConfusionMasteries();
+  const confusions = loadMrtRepairConfusions();
+  const key = mrtRepairConfusionMasteryKey(row);
+  const current = masteries[key];
+  const nextStreak = isCorrect ? (current?.streak ?? 0) + 1 : 0;
+  const reduced = nextStreak >= 4;
+  let removed = false;
+
+  if (reduced) {
+    const selections = { ...(confusions[row.key] ?? {}) };
+    const nextCount = Math.max(0, (selections[row.selected] ?? 0) - 1);
+    if (nextCount > 0) selections[row.selected] = nextCount;
+    else {
+      delete selections[row.selected];
+      removed = true;
+    }
+    if (Object.keys(selections).length) confusions[row.key] = selections;
+    else delete confusions[row.key];
+  }
+
+  const nextMasteries = {
+    ...masteries,
+    [key]: {
+      streak: reduced ? 0 : nextStreak,
+      reductions: (current?.reductions ?? 0) + (reduced ? 1 : 0),
+      lastAnsweredAt: now.toISOString(),
+    },
+  };
+  localStorage.setItem(
+    MRT_REPAIR_CONFUSION_MASTERY_KEY,
+    JSON.stringify(nextMasteries)
+  );
+  if (reduced)
+    localStorage.setItem(MRT_REPAIR_CONFUSIONS_KEY, JSON.stringify(confusions));
+  localStorage.setItem("memodesk-local-updated-at", now.toISOString());
+  return { masteries: nextMasteries, confusions, reduced, removed };
 }
 
 export function recordMrtRepairConfusion(

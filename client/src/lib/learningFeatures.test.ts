@@ -93,6 +93,10 @@ describe("integrated learning features", () => {
       "memodesk-mrt-repair-confusions",
       JSON.stringify({ "BR01:code-to-name": { 大直: 2 } })
     );
+    localStorage.setItem(
+      "memodesk-mrt-repair-confusion-mastery",
+      JSON.stringify({ "BR01:code-to-name::大直": { streak: 3 } })
+    );
     localStorage.setItem("memodesk-mrt-repair-weekly-goal", "5");
     localStorage.setItem(
       "memodesk-element-talent-progress-v1",
@@ -120,6 +124,11 @@ describe("integrated learning features", () => {
     expect(
       JSON.parse(localStorage.getItem("memodesk-mrt-repair-confusions")!)
     ).toEqual({ "BR01:code-to-name": { 大直: 2 } });
+    expect(
+      JSON.parse(
+        localStorage.getItem("memodesk-mrt-repair-confusion-mastery")!
+      )
+    ).toEqual({ "BR01:code-to-name::大直": { streak: 3 } });
     expect(
       JSON.parse(localStorage.getItem("memodesk-mrt-repair-weekly-goal")!)
     ).toBe(5);

@@ -14,7 +14,11 @@ import { recordMrtAnswer } from "@/lib/mrtProgress";
 import {
   buildMrtConfusionPairQuestions,
   clearMrtRepairConfusion,
+  loadMrtRepairConfusionMasteries,
   loadMrtRepairConfusions,
+  mrtConfusionPracticeQuestionCount,
+  mrtRepairConfusionMasteryKey,
+  recordMrtConfusionPracticeAnswer,
   recordMrtRepairConfusion,
   summarizeMrtRepairConfusions,
   type MrtRepairConfusionRow,
@@ -22,10 +26,14 @@ import {
 
 export default function MrtConfusions() {
   const [confusions, setConfusions] = useState(() => loadMrtRepairConfusions());
+  const [masteries, setMasteries] = useState(() =>
+    loadMrtRepairConfusionMasteries()
+  );
   const [practice, setPractice] = useState<MrtRepairConfusionRow | null>(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [answers, setAnswers] = useState<boolean[]>([]);
+  const [reductions, setReductions] = useState(0);
   const rows = useMemo(
     () => summarizeMrtRepairConfusions(confusions, ALL_MRT_STATIONS),
     [confusions]
@@ -40,6 +48,9 @@ export default function MrtConfusions() {
   );
   const current = questions[questionIndex];
   const practiceDone = Boolean(practice && questionIndex >= questions.length);
+  const practiceMastery = practice
+    ? masteries[mrtRepairConfusionMasteryKey(practice)]
+    : undefined;
   const options = useMemo(() => {
     if (!practice || !current) return [];
     const values =
@@ -54,6 +65,7 @@ export default function MrtConfusions() {
     setQuestionIndex(0);
     setSelected(null);
     setAnswers([]);
+    setReductions(0);
   };
 
   const answerQuestion = (value: string) => {
@@ -62,7 +74,13 @@ export default function MrtConfusions() {
     setSelected(value);
     setAnswers(previous => [...previous, correct]);
     recordMrtAnswer(current.station, correct);
-    if (!correct) setConfusions(recordMrtRepairConfusion(current, value));
+    if (!correct) recordMrtRepairConfusion(current, value);
+    if (practice) {
+      const result = recordMrtConfusionPracticeAnswer(practice, correct);
+      setMasteries(result.masteries);
+      setConfusions(result.confusions);
+      if (result.reduced) setReductions(value => value + 1);
+    }
   };
 
   const nextQuestion = () => {
@@ -75,6 +93,7 @@ export default function MrtConfusions() {
     setQuestionIndex(0);
     setSelected(null);
     setAnswers([]);
+    setReductions(0);
   };
 
   return (
@@ -113,6 +132,10 @@ export default function MrtConfusions() {
                 <ArrowLeftRight className="inline w-5 h-5 mx-2 text-red-600" />
                 {practice.confusedCode} {practice.confusedName}
               </h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                依 {practice.count} 次混淆自動安排 {questions.length} 題；每連續答對
+                4 題，混淆權重下降 1。
+              </p>
             </div>
             {!practiceDone && (
               <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">
@@ -127,6 +150,11 @@ export default function MrtConfusions() {
               <p className="text-sm text-muted-foreground mt-4">本輪完成</p>
               <p className="font-display font-extrabold text-5xl mt-1">
                 {answers.filter(Boolean).length}/{questions.length}
+              </p>
+              <p className="font-bold text-emerald-700 mt-3">
+                {reductions > 0
+                  ? `本輪已降低 ${reductions} 點混淆權重`
+                  : `目前連續答對 ${practiceMastery?.streak ?? 0}/4`}
               </p>
               <div className="flex flex-wrap justify-center gap-3 mt-6">
                 <Button
@@ -153,6 +181,9 @@ export default function MrtConfusions() {
                 {current.direction === "code-to-name"
                   ? "看到站碼，選出站名"
                   : "看到站名，選出站碼"}
+              </p>
+              <p className="text-center text-xs font-bold text-emerald-700 mt-2">
+                精熟連勝 {practiceMastery?.streak ?? 0}/4
               </p>
               <p className="text-center font-display font-extrabold text-4xl sm:text-5xl mt-3">
                 {current.prompt}
@@ -185,7 +216,9 @@ export default function MrtConfusions() {
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/60 p-4">
                   <p className="font-bold">
                     {selected === current.answer
-                      ? "答對了，雙向連結再加深一層。"
+                      ? practiceMastery?.streak === 0 && reductions > 0
+                        ? "連續答對 4 題，混淆權重已下降 1。"
+                        : "答對了，雙向連結再加深一層。"
                       : `正確答案是 ${current.answer}，這次混淆已記錄。`}
                   </p>
                   <Button
@@ -228,6 +261,10 @@ export default function MrtConfusions() {
                 <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">
                   {row.direction === "code-to-name" ? "站碼→站名" : "站名→站碼"}
                   · {row.count} 次
+                </span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                  {mrtConfusionPracticeQuestionCount(row.count)} 題 · 連勝
+                  {masteries[mrtRepairConfusionMasteryKey(row)]?.streak ?? 0}/4
                 </span>
                 <Button
                   type="button"
