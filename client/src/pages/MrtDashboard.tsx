@@ -7,8 +7,11 @@ import { segmentsForLine } from "@/lib/mrtCourse";
 import { loadPersonalMrtMnemonics } from "@/lib/mrtMnemonics";
 import {
   loadMrtRepairHistory,
+  loadMrtRepairWeeklyGoal,
+  mrtRepairGoalStats,
   mrtRepairTrend,
-  type MrtRepairTrendPoint,
+  saveMrtRepairWeeklyGoal,
+  type MrtRepairResult,
 } from "@/lib/mrtRepair";
 
 const EMPTY: MrtProgress = {
@@ -22,7 +25,8 @@ const EMPTY: MrtProgress = {
 export default function MrtDashboard() {
   const [progress, setProgress] = useState<MrtProgress>(EMPTY);
   const [hardCodes, setHardCodes] = useState<Set<string>>(new Set());
-  const [repairTrend, setRepairTrend] = useState<MrtRepairTrendPoint[]>([]);
+  const [repairHistory, setRepairHistory] = useState<MrtRepairResult[]>([]);
+  const [weeklyGoal, setWeeklyGoal] = useState(5);
   useEffect(() => {
     setProgress(loadMrtProgress());
     setHardCodes(
@@ -32,8 +36,17 @@ export default function MrtDashboard() {
           .map(([code]) => code)
       )
     );
-    setRepairTrend(mrtRepairTrend(loadMrtRepairHistory()));
+    setRepairHistory(loadMrtRepairHistory());
+    setWeeklyGoal(loadMrtRepairWeeklyGoal());
   }, []);
+  const repairTrend = useMemo(
+    () => mrtRepairTrend(repairHistory),
+    [repairHistory]
+  );
+  const repairGoals = useMemo(
+    () => mrtRepairGoalStats(repairHistory, new Date(), weeklyGoal),
+    [repairHistory, weeklyGoal]
+  );
   const learned = Object.keys(progress.stations).length;
   const weak = Array.from(
     new Set([
@@ -115,6 +128,72 @@ export default function MrtDashboard() {
           </span>
         </div>
       </div>
+      <section className="mt-9">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display font-bold text-2xl">
+              修復目標與連續紀錄
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              每天完成一輪 5 站專班，就會累積連續天數與本週進度。
+            </p>
+          </div>
+          <label className="text-sm font-bold">
+            每週目標
+            <select
+              value={weeklyGoal}
+              onChange={event =>
+                setWeeklyGoal(
+                  saveMrtRepairWeeklyGoal(Number(event.target.value))
+                )
+              }
+              className="ml-2 rounded-lg border bg-white px-3 py-2"
+            >
+              <option value={3}>3 天</option>
+              <option value={5}>5 天</option>
+              <option value={7}>7 天</option>
+            </select>
+          </label>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4 mt-4">
+          <div className="paper-card p-5">
+            <Target className="text-emerald-600" />
+            <strong className="text-3xl block mt-3">
+              {repairGoals.todayAccuracy}%
+            </strong>
+            <span className="text-sm text-muted-foreground">
+              今日完成率 · {repairGoals.todayCompleted ? "已完成" : "待完成"}
+            </span>
+          </div>
+          <div className="paper-card p-5">
+            <Flame className="text-orange-600" />
+            <strong className="text-3xl block mt-3">
+              {repairGoals.streak} 天
+            </strong>
+            <span className="text-sm text-muted-foreground">連續修復紀錄</span>
+          </div>
+          <div className="paper-card p-5">
+            <CalendarDays className="text-blue-600" />
+            <div className="flex items-end justify-between mt-3">
+              <strong className="text-3xl">
+                {repairGoals.weekCompleted}/{repairGoals.weeklyGoal}
+              </strong>
+              <span className="text-sm font-bold">
+                {repairGoals.weeklyRate}%
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-muted mt-3 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-blue-500"
+                style={{ width: `${repairGoals.weeklyRate}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground block mt-2">
+              本週修復目標
+            </span>
+          </div>
+        </div>
+      </section>
       <section className="mt-9">
         <h2 className="font-display font-bold text-2xl">六線精熟度</h2>
         <div className="grid md:grid-cols-2 gap-4 mt-4">

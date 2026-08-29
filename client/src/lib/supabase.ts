@@ -27,6 +27,8 @@ const SNAPSHOT_KEYS = [
   "memodesk-mrt-style-preferences",
   "memodesk-mrt-mnemonic-experiments",
   "memodesk-mrt-repair-history",
+  "memodesk-mrt-repair-confusions",
+  "memodesk-mrt-repair-weekly-goal",
   "memgenius-arcade-scores",
   "memgenius-training-log",
   "memgenius-difficulty",

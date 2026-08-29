@@ -11,12 +11,13 @@ import {
 import { loadMrtProgress, recordMrtAnswer } from "@/lib/mrtProgress";
 import {
   buildMrtRepairQuestions,
+  buildAdaptiveMrtRepairOptions,
+  loadMrtRepairConfusions,
+  recordMrtRepairConfusion,
   repairQuality,
   saveMrtRepairResult,
   selectDailyRepairStations,
 } from "@/lib/mrtRepair";
-
-const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
 
 export default function MrtRepair() {
   const stations = useMemo(
@@ -36,27 +37,14 @@ export default function MrtRepair() {
   const [selected, setSelected] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, boolean>>({});
   const [done, setDone] = useState(false);
+  const [confusions, setConfusions] = useState(() => loadMrtRepairConfusions());
   const current = questions[index];
   const options = useMemo(
     () =>
       current
-        ? shuffle([
-            current.answer,
-            ...shuffle(
-              ALL_MRT_STATIONS.filter(
-                station =>
-                  !station.preview && station.code !== current.station.code
-              )
-            )
-              .slice(0, 3)
-              .map(station =>
-                current.direction === "code-to-name"
-                  ? station.name
-                  : station.code
-              ),
-          ])
+        ? buildAdaptiveMrtRepairOptions(current, ALL_MRT_STATIONS, confusions)
         : [],
-    [current]
+    [confusions, current]
   );
 
   const resultKey = current
@@ -69,6 +57,7 @@ export default function MrtRepair() {
     setSelected(value);
     setResults(saved => ({ ...saved, [resultKey]: correct }));
     recordMrtAnswer(current.station, correct);
+    if (!correct) setConfusions(recordMrtRepairConfusion(current, value));
   };
   const next = () => {
     if (index < questions.length - 1) {
@@ -186,6 +175,9 @@ export default function MrtRepair() {
             第 {index + 1}/{questions.length} 題 · {current.station.lineId} ·
             {current.direction === "code-to-name" ? " 站碼→站名" : " 站名→站碼"}
           </span>
+          <p className="text-xs text-muted-foreground mt-2">
+            干擾選項會優先重現你曾混淆的答案，再加入同線與相近站碼。
+          </p>
           <div className="rounded-2xl bg-primary text-primary-foreground text-center py-9 mt-4">
             <strong className="text-5xl">{current.prompt}</strong>
             <p className="mt-3">

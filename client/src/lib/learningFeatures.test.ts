@@ -90,6 +90,11 @@ describe("integrated learning features", () => {
       JSON.stringify([{ date: "2026-08-13", accuracy: 80 }])
     );
     localStorage.setItem(
+      "memodesk-mrt-repair-confusions",
+      JSON.stringify({ "BR01:code-to-name": { 大直: 2 } })
+    );
+    localStorage.setItem("memodesk-mrt-repair-weekly-goal", "5");
+    localStorage.setItem(
       "memodesk-element-talent-progress-v1",
       JSON.stringify({ version: 1, talents: { visualBuilder: { xp: 35 } } })
     );
@@ -112,6 +117,12 @@ describe("integrated learning features", () => {
     expect(
       JSON.parse(localStorage.getItem("memodesk-mrt-repair-history")!)
     ).toEqual([{ date: "2026-08-13", accuracy: 80 }]);
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-mrt-repair-confusions")!)
+    ).toEqual({ "BR01:code-to-name": { 大直: 2 } });
+    expect(
+      JSON.parse(localStorage.getItem("memodesk-mrt-repair-weekly-goal")!)
+    ).toBe(5);
     expect(
       JSON.parse(localStorage.getItem("memodesk-element-talent-progress-v1")!)
     ).toEqual({ version: 1, talents: { visualBuilder: { xp: 35 } } });

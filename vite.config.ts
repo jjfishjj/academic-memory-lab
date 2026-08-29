@@ -241,10 +241,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 750,
+    // PlayCanvas ships as one large ESM engine file. Keep it isolated and
+    // cacheable; the route component itself remains a small lazy chunk.
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes("/playcanvas/")) return "playcanvas-vendor";
           if (id.includes("@react-three")) return "react-three-vendor";
           if (id.includes("/three/examples/") || id.includes("/three/addons/"))
             return "three-extras";

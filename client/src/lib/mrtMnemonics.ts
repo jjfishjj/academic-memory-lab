@@ -67,6 +67,13 @@ export interface MrtExperimentSummary {
 }
 
 export const MRT_MNEMONIC_EXPERIMENTS_KEY = "memodesk-mrt-mnemonic-experiments";
+export const MRT_EXPERIMENT_MIN_ATTEMPTS_PER_VARIANT = 3;
+
+export interface MrtExperimentConfidence {
+  attempts: [number, number];
+  ready: boolean;
+  winner: 0 | 1 | null;
+}
 
 const PERSONAL_KEY = "memodesk-mrt-personal-mnemonics";
 export const MRT_PERSONAL_MNEMONICS_KEY = PERSONAL_KEY;
@@ -219,19 +226,40 @@ export function loadMrtMnemonicExperiments(): MrtMnemonicExperiment[] {
 export function winningMrtExperimentVariant(
   experiment: MrtMnemonicExperiment
 ): 0 | 1 | null {
-  const daySeven = [0, 1].map(variant =>
-    experiment.checks.filter(
-      check => check.day === 7 && check.variant === variant
-    )
+  return mrtExperimentConfidence(experiment).winner;
+}
+
+export function mrtExperimentConfidence(
+  experiment: MrtMnemonicExperiment
+): MrtExperimentConfidence {
+  const attempts = [0, 1].map(
+    variant =>
+      new Set(
+        experiment.checks
+          .filter(check => check.variant === variant)
+          .map(check => check.day)
+      ).size
+  ) as [number, number];
+  const ready = attempts.every(
+    count => count >= MRT_EXPERIMENT_MIN_ATTEMPTS_PER_VARIANT
   );
-  if (daySeven.some(checks => checks.length === 0)) return null;
-  const daySevenRemembered = daySeven.map(
-    checks => checks.filter(check => check.remembered).length
+  if (!ready) return { attempts, ready, winner: null };
+  const remembered = [0, 1].map(
+    variant =>
+      experiment.checks.filter(
+        check => check.variant === variant && check.remembered
+      ).length
   );
-  if (daySevenRemembered[0] !== daySevenRemembered[1])
-    return daySevenRemembered[0] > daySevenRemembered[1] ? 0 : 1;
-  const summary = summarizeMrtExperiments([experiment])[0];
-  return summary.winner;
+  return {
+    attempts,
+    ready,
+    winner:
+      remembered[0] === remembered[1]
+        ? null
+        : remembered[0] > remembered[1]
+          ? 0
+          : 1,
+  };
 }
 
 export function applyReadyMrtExperimentWinners(

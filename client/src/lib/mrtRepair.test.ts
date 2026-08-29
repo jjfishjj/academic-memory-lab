@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ALL_MRT_STATIONS } from "./mrtData";
 import {
   buildMrtRepairQuestions,
+  buildAdaptiveMrtRepairOptions,
+  loadMrtRepairConfusions,
+  mrtRepairGoalStats,
+  recordMrtRepairConfusion,
   selectDailyRepairStations,
   repairQuality,
   saveMrtRepairResult,
@@ -87,6 +91,43 @@ describe("MRT weak-station repair", () => {
     );
     expect(trend.map(item => item.weakCount)).toEqual([1, 0]);
     expect(trend.at(-1)?.repairRate).toBe(100);
+  });
+
+  it("prioritizes a previously confused answer in adaptive options", () => {
+    const station = ALL_MRT_STATIONS.find(item => item.code === "BR06")!;
+    const confused = ALL_MRT_STATIONS.find(item => item.code === "BL18")!;
+    const [question] = buildMrtRepairQuestions([station]);
+    recordMrtRepairConfusion(question, confused.name);
+    recordMrtRepairConfusion(question, confused.name);
+    const options = buildAdaptiveMrtRepairOptions(
+      question,
+      ALL_MRT_STATIONS,
+      loadMrtRepairConfusions()
+    );
+    expect(options).toHaveLength(4);
+    expect(options).toContain(question.answer);
+    expect(options).toContain(confused.name);
+  });
+
+  it("calculates today's result, streak and configurable weekly goal", () => {
+    const history = ["2026-08-25", "2026-08-26", "2026-08-27"].map(
+      (date, index) => ({
+        date,
+        stationCodes: ["BR01"],
+        correctCodes: index === 2 ? ["BR01"] : [],
+        accuracy: index === 2 ? 100 : 60,
+      })
+    );
+    const stats = mrtRepairGoalStats(
+      history,
+      new Date("2026-08-27T18:00:00"),
+      5
+    );
+    expect(stats.todayCompleted).toBe(true);
+    expect(stats.todayAccuracy).toBe(100);
+    expect(stats.streak).toBe(3);
+    expect(stats.weekCompleted).toBe(3);
+    expect(stats.weeklyRate).toBe(60);
   });
 
   it("reassesses quality and stores one result per day", () => {

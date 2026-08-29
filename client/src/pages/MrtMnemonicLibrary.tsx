@@ -23,6 +23,7 @@ import {
   experimentDueDay,
   getMrtMnemonic,
   loadMrtMnemonicExperiments,
+  mrtExperimentConfidence,
   mnemonicStyleOf,
   parseMrtMnemonicImport,
   previewMrtMnemonicImport,
@@ -464,7 +465,7 @@ export default function MrtMnemonicLibrary() {
           <h2 className="font-display font-bold text-xl">AI 聯想 A/B 實驗</h2>
         </div>
         <p className="text-sm text-muted-foreground mt-1">
-          從任一站的 AI 候選啟動兩種風格，於第 1、3、7 天比較回想效果。
+          從任一站的 AI 候選啟動兩種風格，於第 1、3、7 天比較回想效果；每版至少三次樣本才可能自動套用。
         </p>
         <div className="grid grid-cols-3 gap-3 mt-4">
           {retentionByDay.map(item => (
@@ -533,6 +534,7 @@ export default function MrtMnemonicLibrary() {
           <div className="grid gap-3 mt-4">
             {experiments.slice(0, 6).map(experiment => {
               const due = experimentDueDay(experiment);
+              const confidence = mrtExperimentConfidence(experiment);
               const summary = experimentSummaries.find(
                 item => item.stationCode === experiment.stationCode
               );
@@ -549,21 +551,34 @@ export default function MrtMnemonicLibrary() {
                       {experiment.stationCode} · 第 {due ?? "—"} 天檢查
                     </strong>
                     <span className="text-xs font-bold">
-                      A {scores[0]} 次記得 · B {scores[1]} 次記得
+                      A {scores[0]} 次記得 · B {scores[1]} 次記得 · 信心樣本{" "}
+                      {Math.min(...confidence.attempts)}/3
                     </span>
                   </div>
                   {experiment.appliedAt &&
                     experiment.appliedWinner !== undefined && (
                       <p className="rounded-lg bg-blue-50 text-blue-800 p-2 mt-3 text-xs font-bold">
-                        第 7 天已自動套用{" "}
+                        已達信心門檻並自動套用{" "}
                         {experiment.appliedWinner === 0 ? "A" : "B"}
                         ，另一版本已淘汰。
+                      </p>
+                    )}
+                  {!experiment.appliedAt && !due && !confidence.ready && (
+                    <p className="rounded-lg bg-amber-50 text-amber-800 p-2 mt-3 text-xs font-bold">
+                      樣本尚未達 A、B 各 3 次，暫不淘汰任何版本。
+                    </p>
+                  )}
+                  {!experiment.appliedAt &&
+                    confidence.ready &&
+                    confidence.winner === null && (
+                      <p className="rounded-lg bg-amber-50 text-amber-800 p-2 mt-3 text-xs font-bold">
+                        兩版記憶效果相同，信心不足，繼續保留兩個版本。
                       </p>
                     )}
                   {summary?.winner !== null &&
                     summary?.winner !== undefined && (
                       <p className="rounded-lg bg-emerald-50 text-emerald-800 p-2 mt-3 text-xs font-bold">
-                        目前勝出：{summary.winner === 0 ? "A" : "B"} ·{" "}
+                        暫時領先：{summary.winner === 0 ? "A" : "B"} ·{" "}
                         {summary.variants[summary.winner].text}
                       </p>
                     )}

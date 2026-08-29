@@ -9,6 +9,7 @@ import {
   previewMrtMnemonicImport,
   applyMrtMnemonicImport,
   applyReadyMrtExperimentWinners,
+  mrtExperimentConfidence,
   experimentDueDay,
   qualityAdjustedPreferences,
   sortMrtSuggestionsByPreference,
@@ -110,11 +111,71 @@ describe("MRT mnemonic engine", () => {
     expect(summary.winner).toBe(0);
   });
 
-  it("applies the clear winner after both day-seven checks", () => {
+  it("waits for three samples per variant before applying a winner", () => {
     const experiment = {
       id: "e7",
       stationCode: "BR01",
       variants: ["幽默型：勝出", "故事型：淘汰"] as [string, string],
+      startedAt: "2026-01-01T00:00:00Z",
+      checks: [
+        {
+          day: 1 as const,
+          variant: 0 as const,
+          remembered: true,
+          answeredAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          day: 1 as const,
+          variant: 1 as const,
+          remembered: false,
+          answeredAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          day: 3 as const,
+          variant: 0 as const,
+          remembered: true,
+          answeredAt: "2026-01-04T00:00:00Z",
+        },
+        {
+          day: 3 as const,
+          variant: 1 as const,
+          remembered: true,
+          answeredAt: "2026-01-04T00:00:00Z",
+        },
+        {
+          day: 7 as const,
+          variant: 0 as const,
+          remembered: true,
+          answeredAt: "2026-01-08T00:00:00Z",
+        },
+        {
+          day: 7 as const,
+          variant: 1 as const,
+          remembered: false,
+          answeredAt: "2026-01-08T00:00:00Z",
+        },
+      ],
+    };
+    expect(mrtExperimentConfidence(experiment).ready).toBe(true);
+    expect(winningMrtExperimentVariant(experiment)).toBe(0);
+    const settled = applyReadyMrtExperimentWinners(
+      [experiment],
+      { BR01: { sound: "舊聯想", favorite: true, quality: "okay" } },
+      new Date("2026-01-09T00:00:00Z")
+    );
+    expect(settled.mnemonics.BR01).toEqual({
+      sound: "幽默型：勝出",
+      favorite: true,
+      quality: "okay",
+    });
+    expect(settled.experiments[0].appliedWinner).toBe(0);
+  });
+
+  it("does not eliminate a variant from a single day-seven result", () => {
+    const experiment = {
+      id: "too-small",
+      stationCode: "BR01",
+      variants: ["幽默型：A", "故事型：B"] as [string, string],
       startedAt: "2026-01-01T00:00:00Z",
       checks: [
         {
@@ -131,18 +192,15 @@ describe("MRT mnemonic engine", () => {
         },
       ],
     };
-    expect(winningMrtExperimentVariant(experiment)).toBe(0);
-    const settled = applyReadyMrtExperimentWinners(
-      [experiment],
-      { BR01: { sound: "舊聯想", favorite: true, quality: "okay" } },
-      new Date("2026-01-09T00:00:00Z")
-    );
-    expect(settled.mnemonics.BR01).toEqual({
-      sound: "幽默型：勝出",
-      favorite: true,
-      quality: "okay",
-    });
-    expect(settled.experiments[0].appliedWinner).toBe(0);
+    expect(mrtExperimentConfidence(experiment).ready).toBe(false);
+    expect(winningMrtExperimentVariant(experiment)).toBeNull();
+    expect(
+      applyReadyMrtExperimentWinners(
+        [experiment],
+        {},
+        new Date("2026-01-09T00:00:00Z")
+      ).applied
+    ).toEqual([]);
   });
 
   it("uses a dedicated story for major and branch stations", () => {
