@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ALL_MRT_STATIONS } from "./mrtData";
 import {
+  buildMrtConfusionPairQuestions,
   buildMrtRepairQuestions,
   buildAdaptiveMrtRepairOptions,
   clearMrtRepairConfusion,
@@ -148,6 +149,17 @@ describe("MRT weak-station repair", () => {
       confusedCode: "BR07",
       count: 2,
     });
+    expect(
+      buildMrtConfusionPairQuestions(row, ALL_MRT_STATIONS).map(question => [
+        question.station.code,
+        question.direction,
+      ])
+    ).toEqual([
+      ["BR06", "code-to-name"],
+      ["BR06", "name-to-code"],
+      ["BR07", "code-to-name"],
+      ["BR07", "name-to-code"],
+    ]);
     clearMrtRepairConfusion(row.key, row.selected);
     expect(
       summarizeMrtRepairConfusions(loadMrtRepairConfusions(), ALL_MRT_STATIONS)

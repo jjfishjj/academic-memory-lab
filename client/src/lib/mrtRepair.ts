@@ -116,6 +116,16 @@ export function buildMrtRepairQuestions(
   ]);
 }
 
+export function buildMrtConfusionPairQuestions(
+  row: MrtRepairConfusionRow,
+  stations: MrtStation[]
+): MrtRepairQuestionBlueprint[] {
+  const source = stations.find(station => station.code === row.sourceCode);
+  const confused = stations.find(station => station.code === row.confusedCode);
+  if (!source || !confused) return [];
+  return buildMrtRepairQuestions([source, confused]);
+}
+
 const confusionKey = (question: MrtRepairQuestionBlueprint) =>
   `${question.station.code}:${question.direction}`;
 
