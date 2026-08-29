@@ -3,9 +3,12 @@ import { ALL_MRT_STATIONS } from "./mrtData";
 import {
   buildMrtRepairQuestions,
   buildAdaptiveMrtRepairOptions,
+  clearMrtRepairConfusion,
   loadMrtRepairConfusions,
   mrtRepairGoalStats,
+  recommendMrtRepairWeeklyGoal,
   recordMrtRepairConfusion,
+  summarizeMrtRepairConfusions,
   selectDailyRepairStations,
   repairQuality,
   saveMrtRepairResult,
@@ -128,6 +131,46 @@ describe("MRT weak-station repair", () => {
     expect(stats.streak).toBe(3);
     expect(stats.weekCompleted).toBe(3);
     expect(stats.weeklyRate).toBe(60);
+  });
+
+  it("sorts confusion pairs and clears one selected pair", () => {
+    const station = ALL_MRT_STATIONS.find(item => item.code === "BR06")!;
+    const confused = ALL_MRT_STATIONS.find(item => item.code === "BR07")!;
+    const [question] = buildMrtRepairQuestions([station]);
+    recordMrtRepairConfusion(question, confused.name);
+    recordMrtRepairConfusion(question, confused.name);
+    const [row] = summarizeMrtRepairConfusions(
+      loadMrtRepairConfusions(),
+      ALL_MRT_STATIONS
+    );
+    expect(row).toMatchObject({
+      sourceCode: "BR06",
+      confusedCode: "BR07",
+      count: 2,
+    });
+    clearMrtRepairConfusion(row.key, row.selected);
+    expect(
+      summarizeMrtRepairConfusions(loadMrtRepairConfusions(), ALL_MRT_STATIONS)
+    ).toEqual([]);
+  });
+
+  it("recommends raising or lowering the weekly goal from 14 days", () => {
+    const completeDays = Array.from({ length: 10 }, (_, index) => ({
+      date: `2026-08-${String(16 + index).padStart(2, "0")}`,
+      stationCodes: ["BR01"],
+      correctCodes: ["BR01"],
+      accuracy: 100,
+    }));
+    expect(
+      recommendMrtRepairWeeklyGoal(
+        completeDays,
+        new Date("2026-08-29T18:00:00"),
+        5
+      )
+    ).toMatchObject({ direction: "raise", suggestedGoal: 7 });
+    expect(
+      recommendMrtRepairWeeklyGoal([], new Date("2026-08-29T18:00:00"), 5)
+    ).toMatchObject({ direction: "lower", suggestedGoal: 3 });
   });
 
   it("reassesses quality and stores one result per day", () => {

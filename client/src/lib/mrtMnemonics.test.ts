@@ -15,6 +15,7 @@ import {
   sortMrtSuggestionsByPreference,
   summarizeMrtExperiments,
   winningMrtExperimentVariant,
+  type MrtMnemonicExperiment,
 } from "./mrtMnemonics";
 
 describe("MRT mnemonic engine", () => {
@@ -53,7 +54,7 @@ describe("MRT mnemonic engine", () => {
   });
 
   it("schedules A/B recall checks on days 1, 3 and 7", () => {
-    const experiment = {
+    const experiment: MrtMnemonicExperiment = {
       id: "e1",
       stationCode: "BR01",
       variants: ["A", "B"] as [string, string],
@@ -201,6 +202,55 @@ describe("MRT mnemonic engine", () => {
         new Date("2026-01-09T00:00:00Z")
       ).applied
     ).toEqual([]);
+  });
+
+  it("opens a day-fourteen tiebreaker and applies its winner", () => {
+    const experiment: MrtMnemonicExperiment = {
+      id: "tiebreak",
+      stationCode: "BR01",
+      variants: ["幽默型：A", "故事型：B"] as [string, string],
+      startedAt: "2026-01-01T00:00:00Z",
+      checks: ([1, 3, 7] as const).flatMap(day => [
+        {
+          day,
+          variant: 0 as const,
+          remembered: day !== 3,
+          answeredAt: `2026-01-${String(day + 1).padStart(2, "0")}T00:00:00Z`,
+        },
+        {
+          day,
+          variant: 1 as const,
+          remembered: day !== 7,
+          answeredAt: `2026-01-${String(day + 1).padStart(2, "0")}T00:00:00Z`,
+        },
+      ]),
+    };
+    expect(mrtExperimentConfidence(experiment).winner).toBeNull();
+    expect(experimentDueDay(experiment, new Date("2026-01-15T00:00:00Z"))).toBe(
+      14
+    );
+    experiment.checks.push(
+      {
+        day: 14,
+        variant: 0,
+        remembered: true,
+        answeredAt: "2026-01-15T00:00:00Z",
+      },
+      {
+        day: 14,
+        variant: 1,
+        remembered: false,
+        answeredAt: "2026-01-15T00:00:00Z",
+      }
+    );
+    expect(winningMrtExperimentVariant(experiment)).toBe(0);
+    expect(
+      applyReadyMrtExperimentWinners(
+        [experiment],
+        {},
+        new Date("2026-01-16T00:00:00Z")
+      ).experiments[0].appliedWinner
+    ).toBe(0);
   });
 
   it("uses a dedicated story for major and branch stations", () => {

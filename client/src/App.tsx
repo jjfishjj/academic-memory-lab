@@ -21,6 +21,7 @@ const AchievementsPage = lazy(() => import("./pages/AchievementsPage"));
 const CloudSyncPage = lazy(() => import("./pages/CloudSyncPage"));
 const MrtMnemonicLibrary = lazy(() => import("./pages/MrtMnemonicLibrary"));
 const MrtRepair = lazy(() => import("./pages/MrtRepair"));
+const MrtConfusions = lazy(() => import("./pages/MrtConfusions"));
 const ElementGame = lazy(() => import("./pages/ElementGame"));
 const AlkaliLab = lazy(() => import("./pages/AlkaliLab"));
 const PeriodicExplorer = lazy(() => import("./pages/PeriodicExplorer"));
@@ -73,11 +74,15 @@ function Router() {
           <Route path={"/train/mrt/sync"} component={CloudSyncPage} />
           <Route path={"/train/mrt/mnemonics"} component={MrtMnemonicLibrary} />
           <Route path={"/train/mrt/repair"} component={MrtRepair} />
+          <Route path={"/train/mrt/confusions"} component={MrtConfusions} />
           <Route path={"/train/elements"} component={ElementGame} />
           <Route path={"/explore"} component={ElementGame} />
           <Route path={"/alkali"} component={AlkaliLab} />
           <Route path={"/periodic-table"} component={PeriodicExplorer} />
-          <Route path={"/periodic-table/cards"} component={ElementMemoryBooklet} />
+          <Route
+            path={"/periodic-table/cards"}
+            component={ElementMemoryBooklet}
+          />
           <Route
             path={"/train/elements/place"}
             component={ElementPlacementGame}

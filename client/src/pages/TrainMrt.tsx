@@ -11,6 +11,7 @@ import {
   Eye,
   Headphones,
   Map,
+  Merge,
   Route,
   RotateCcw,
   Sparkles,
@@ -379,13 +380,26 @@ export default function TrainMrt() {
             </Link>
             <Link
               href="/train/mrt/repair"
-              className="paper-card p-4 flex items-center gap-3 group sm:col-span-2 border-red-200 bg-red-50"
+              className="paper-card p-4 flex items-center gap-3 group border-red-200 bg-red-50"
             >
               <Wrench className="w-7 h-7 text-red-700" />
               <span className="flex-1">
                 <strong className="font-display block">每日弱站修復</strong>
                 <span className="text-xs text-muted-foreground">
                   5 站雙向測驗，完成後重新評估聯想品質
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="/train/mrt/confusions"
+              className="paper-card p-4 flex items-center gap-3 group border-orange-200 bg-orange-50"
+            >
+              <Merge className="w-7 h-7 text-orange-700" />
+              <span className="flex-1">
+                <strong className="font-display block">捷運混淆矩陣</strong>
+                <span className="text-xs text-muted-foreground">
+                  排序常錯組合並個別清除紀錄
                 </span>
               </span>
               <ArrowRight className="w-4 h-4" />

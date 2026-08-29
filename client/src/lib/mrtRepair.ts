@@ -40,6 +40,25 @@ export interface MrtRepairGoalStats {
   weeklyRate: number;
 }
 
+export interface MrtRepairGoalRecommendation {
+  currentGoal: number;
+  suggestedGoal: number;
+  completedDays: number;
+  completionRate: number;
+  direction: "raise" | "keep" | "lower";
+}
+
+export interface MrtRepairConfusionRow {
+  key: string;
+  sourceCode: string;
+  sourceName: string;
+  confusedCode: string;
+  confusedName: string;
+  direction: MrtRepairDirection;
+  selected: string;
+  count: number;
+}
+
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA");
 
 export function selectDailyRepairStations(
@@ -130,6 +149,63 @@ export function recordMrtRepairConfusion(
     ...current,
     [key]: { ...choices, [selected]: (choices[selected] ?? 0) + 1 },
   };
+  localStorage.setItem(MRT_REPAIR_CONFUSIONS_KEY, JSON.stringify(next));
+  localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
+  return next;
+}
+
+export function summarizeMrtRepairConfusions(
+  confusions: MrtRepairConfusions,
+  stations: MrtStation[]
+): MrtRepairConfusionRow[] {
+  const byCode = new Map(stations.map(station => [station.code, station]));
+  const byName = new Map(stations.map(station => [station.name, station]));
+  return Object.entries(confusions)
+    .flatMap(([key, selections]) => {
+      const separator = key.indexOf(":");
+      const sourceCode = key.slice(0, separator);
+      const direction = key.slice(separator + 1) as MrtRepairDirection;
+      const source = byCode.get(sourceCode);
+      if (!source || !["code-to-name", "name-to-code"].includes(direction))
+        return [];
+      return Object.entries(selections).flatMap(([selected, count]) => {
+        const confused =
+          direction === "code-to-name"
+            ? byName.get(selected)
+            : byCode.get(selected);
+        if (!confused || !Number.isFinite(count) || count <= 0) return [];
+        return [
+          {
+            key,
+            sourceCode,
+            sourceName: source.name,
+            confusedCode: confused.code,
+            confusedName: confused.name,
+            direction,
+            selected,
+            count,
+          },
+        ];
+      });
+    })
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        a.sourceCode.localeCompare(b.sourceCode) ||
+        a.confusedCode.localeCompare(b.confusedCode)
+    );
+}
+
+export function clearMrtRepairConfusion(
+  key: string,
+  selected: string
+): MrtRepairConfusions {
+  const current = loadMrtRepairConfusions();
+  const next = { ...current };
+  const selections = { ...(next[key] ?? {}) };
+  delete selections[selected];
+  if (Object.keys(selections).length) next[key] = selections;
+  else delete next[key];
   localStorage.setItem(MRT_REPAIR_CONFUSIONS_KEY, JSON.stringify(next));
   localStorage.setItem("memodesk-local-updated-at", new Date().toISOString());
   return next;
@@ -252,6 +328,49 @@ export function mrtRepairGoalStats(
     weekCompleted,
     weeklyGoal,
     weeklyRate: Math.min(100, Math.round((weekCompleted / weeklyGoal) * 100)),
+  };
+}
+
+export function recommendMrtRepairWeeklyGoal(
+  history: MrtRepairResult[],
+  now = new Date(),
+  currentGoal = 5
+): MrtRepairGoalRecommendation {
+  const earliest = new Date(now);
+  earliest.setHours(0, 0, 0, 0);
+  earliest.setDate(earliest.getDate() - 13);
+  const completedDays = new Set(
+    history
+      .filter(item => {
+        const date = new Date(`${item.date}T12:00:00`);
+        return date >= earliest && date <= now;
+      })
+      .map(item => item.date)
+  ).size;
+  const expected = currentGoal * 2;
+  const completionRate = expected
+    ? Math.min(100, Math.round((completedDays / expected) * 100))
+    : 0;
+  const goals = [3, 5, 7];
+  const index = Math.max(0, goals.indexOf(currentGoal));
+  const direction =
+    completionRate >= 80 && index < goals.length - 1
+      ? "raise"
+      : completionRate < 50 && index > 0
+        ? "lower"
+        : "keep";
+  const suggestedGoal =
+    direction === "raise"
+      ? goals[index + 1]
+      : direction === "lower"
+        ? goals[index - 1]
+        : currentGoal;
+  return {
+    currentGoal,
+    suggestedGoal,
+    completedDays,
+    completionRate,
+    direction,
   };
 }
 

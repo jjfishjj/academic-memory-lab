@@ -81,7 +81,7 @@ export default function MrtMnemonicLibrary() {
   );
   const retentionByDay = useMemo(
     () =>
-      ([1, 3, 7] as const).map(day => {
+      ([1, 3, 7, 14] as const).map(day => {
         const rows = experimentSummaries.flatMap(summary =>
           summary.retention.filter(item => item.day === day)
         );
@@ -369,7 +369,9 @@ export default function MrtMnemonicLibrary() {
     const next = [experiment, ...experiments];
     saveMrtMnemonicExperiments(next);
     setExperiments(next);
-    setMessage(`${stationCode} A/B 測試已開始；第 1、3、7 天會出現回想檢查。`);
+    setMessage(
+      `${stationCode} A/B 測試已開始；第 1、3、7 天會出現回想檢查，平手時第 14 天決勝。`
+    );
   };
   const recordExperiment = (
     id: string,
@@ -465,9 +467,10 @@ export default function MrtMnemonicLibrary() {
           <h2 className="font-display font-bold text-xl">AI 聯想 A/B 實驗</h2>
         </div>
         <p className="text-sm text-muted-foreground mt-1">
-          從任一站的 AI 候選啟動兩種風格，於第 1、3、7 天比較回想效果；每版至少三次樣本才可能自動套用。
+          從任一站的 AI 候選啟動兩種風格，於第 1、3、7
+          天比較回想效果；三次平手會保留兩版，於第 14 天追加決勝回測。
         </p>
-        <div className="grid grid-cols-3 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           {retentionByDay.map(item => (
             <div key={item.day} className="rounded-xl bg-cyan-50 p-4">
               <span className="text-xs font-bold text-cyan-800">
@@ -551,8 +554,8 @@ export default function MrtMnemonicLibrary() {
                       {experiment.stationCode} · 第 {due ?? "—"} 天檢查
                     </strong>
                     <span className="text-xs font-bold">
-                      A {scores[0]} 次記得 · B {scores[1]} 次記得 · 信心樣本{" "}
-                      {Math.min(...confidence.attempts)}/3
+                      A {scores[0]} 次記得／{confidence.attempts[0]} 次回測 · B{" "}
+                      {scores[1]} 次記得／{confidence.attempts[1]} 次回測
                     </span>
                   </div>
                   {experiment.appliedAt &&
@@ -572,7 +575,7 @@ export default function MrtMnemonicLibrary() {
                     confidence.ready &&
                     confidence.winner === null && (
                       <p className="rounded-lg bg-amber-50 text-amber-800 p-2 mt-3 text-xs font-bold">
-                        兩版記憶效果相同，信心不足，繼續保留兩個版本。
+                        兩版記憶效果相同，繼續保留；第 14 天會開放決勝回測。
                       </p>
                     )}
                   {summary?.winner !== null &&

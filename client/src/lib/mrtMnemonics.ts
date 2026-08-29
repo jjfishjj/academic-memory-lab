@@ -37,7 +37,7 @@ export interface MrtMnemonicExperiment {
   variants: [string, string];
   startedAt: string;
   checks: Array<{
-    day: 1 | 3 | 7;
+    day: 1 | 3 | 7 | 14;
     variant: 0 | 1;
     remembered: boolean;
     answeredAt: string;
@@ -47,7 +47,7 @@ export interface MrtMnemonicExperiment {
 }
 
 export interface MrtExperimentRetention {
-  day: 1 | 3 | 7;
+  day: 1 | 3 | 7 | 14;
   remembered: number;
   attempts: number;
   rate: number | null;
@@ -305,23 +305,31 @@ export function saveMrtMnemonicExperiments(items: MrtMnemonicExperiment[]) {
 export function experimentDueDay(
   experiment: MrtMnemonicExperiment,
   now = new Date()
-): 1 | 3 | 7 | null {
+): 1 | 3 | 7 | 14 | null {
   const elapsed =
     (now.getTime() - new Date(experiment.startedAt).getTime()) / 86_400_000;
-  return (
-    ([1, 3, 7] as const).find(
-      day =>
-        elapsed >= day &&
-        experiment.checks.filter(check => check.day === day).length < 2
-    ) ?? null
+  const scheduled = ([1, 3, 7] as const).find(
+    day =>
+      elapsed >= day &&
+      experiment.checks.filter(check => check.day === day).length < 2
   );
+  if (scheduled) return scheduled;
+  const confidence = mrtExperimentConfidence(experiment);
+  if (
+    elapsed >= 14 &&
+    confidence.ready &&
+    confidence.winner === null &&
+    experiment.checks.filter(check => check.day === 14).length < 2
+  )
+    return 14;
+  return null;
 }
 
 export function summarizeMrtExperiments(
   experiments: MrtMnemonicExperiment[]
 ): MrtExperimentSummary[] {
   return experiments.map(experiment => {
-    const retention = ([1, 3, 7] as const).map(day => {
+    const retention = ([1, 3, 7, 14] as const).map(day => {
       const checks = experiment.checks.filter(check => check.day === day);
       const remembered = checks.filter(check => check.remembered).length;
       return {

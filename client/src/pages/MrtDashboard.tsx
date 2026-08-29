@@ -10,6 +10,7 @@ import {
   loadMrtRepairWeeklyGoal,
   mrtRepairGoalStats,
   mrtRepairTrend,
+  recommendMrtRepairWeeklyGoal,
   saveMrtRepairWeeklyGoal,
   type MrtRepairResult,
 } from "@/lib/mrtRepair";
@@ -45,6 +46,10 @@ export default function MrtDashboard() {
   );
   const repairGoals = useMemo(
     () => mrtRepairGoalStats(repairHistory, new Date(), weeklyGoal),
+    [repairHistory, weeklyGoal]
+  );
+  const goalRecommendation = useMemo(
+    () => recommendMrtRepairWeeklyGoal(repairHistory, new Date(), weeklyGoal),
     [repairHistory, weeklyGoal]
   );
   const learned = Object.keys(progress.stations).length;
@@ -193,6 +198,35 @@ export default function MrtDashboard() {
             </span>
           </div>
         </div>
+        <div
+          className={`rounded-2xl border p-4 mt-4 flex flex-col sm:flex-row sm:items-center gap-3 ${goalRecommendation.direction === "raise" ? "border-emerald-200 bg-emerald-50" : goalRecommendation.direction === "lower" ? "border-amber-200 bg-amber-50" : "bg-muted/40"}`}
+        >
+          <div className="flex-1">
+            <strong className="font-display block">最近兩週目標建議</strong>
+            <p className="text-sm text-muted-foreground mt-1">
+              近 14 天完成 {goalRecommendation.completedDays}{" "}
+              天，相對目前目標達成率 {goalRecommendation.completionRate}%：
+              {goalRecommendation.direction === "raise"
+                ? `狀態穩定，建議提高到每週 ${goalRecommendation.suggestedGoal} 天。`
+                : goalRecommendation.direction === "lower"
+                  ? `先降低到每週 ${goalRecommendation.suggestedGoal} 天，建立可持續節奏。`
+                  : `目前每週 ${weeklyGoal} 天很合適，繼續維持。`}
+            </p>
+          </div>
+          {goalRecommendation.direction !== "keep" && (
+            <button
+              type="button"
+              onClick={() =>
+                setWeeklyGoal(
+                  saveMrtRepairWeeklyGoal(goalRecommendation.suggestedGoal)
+                )
+              }
+              className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
+            >
+              套用 {goalRecommendation.suggestedGoal} 天目標
+            </button>
+          )}
+        </div>
       </section>
       <section className="mt-9">
         <h2 className="font-display font-bold text-2xl">六線精熟度</h2>
@@ -251,7 +285,15 @@ export default function MrtDashboard() {
         <span className="font-bold text-red-700">開始 →</span>
       </Link>
       <section className="mt-9">
-        <h2 className="font-display font-bold text-2xl">弱站品質熱區</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display font-bold text-2xl">弱站品質熱區</h2>
+          <Link
+            href="/train/mrt/confusions"
+            className="text-sm font-bold text-primary hover:underline"
+          >
+            查看混淆矩陣 →
+          </Link>
+        </div>
         {weak.length ? (
           <div className="flex flex-wrap gap-2 mt-4">
             {weak.map(([code, saved]) => {
