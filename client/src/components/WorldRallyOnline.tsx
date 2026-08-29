@@ -73,9 +73,13 @@ export default function WorldRallyOnline({
     [leaders, setLeaders] = useState<RallyRun[]>([]),
     [ghost, setGhost] = useState<RallyRun | null>(null);
   const submitted = useRef(""),
-    currentUser = useRef<User | null>(null);
-  function restoreCloudPayload(remote: Awaited<ReturnType<typeof loadRallyProfile>>) {
+    currentUser = useRef<User | null>(null),
+    remoteUpdatedAt = useRef<string | null>(null);
+  function restoreCloudPayload(
+    remote: Awaited<ReturnType<typeof loadRallyProfile>>
+  ) {
     if (!remote) return;
+    remoteUpdatedAt.current = remote.updated_at;
     const payload = remote.profile as { game?: unknown; learning?: unknown };
     setName(remote.display_name);
     onRestore(payload?.game ?? remote.profile, remote.story_state);
@@ -114,6 +118,11 @@ export default function WorldRallyOnline({
     const { data } = supabase.auth.onAuthStateChange((_e, s) => {
       currentUser.current = s?.user ?? null;
       setUser(currentUser.current);
+      if (currentUser.current) {
+        void loadRallyProfile(currentUser.current.id).then(restoreCloudPayload);
+      } else {
+        remoteUpdatedAt.current = null;
+      }
       void refresh(currentUser.current?.id);
     });
     void refresh();
@@ -132,14 +141,17 @@ export default function WorldRallyOnline({
     if (submitted.current === key) return;
     submitted.current = key;
     submitRallyRun({ ...latestRun, user_id: user.id, display_name: name })
-      .then(async () => {
-        await saveRallyProfile(
+      .then(async adjudicated => {
+        remoteUpdatedAt.current = await saveRallyProfile(
           user.id,
           name,
           { game: profile, learning: learningProfile },
-          storyState
+          storyState,
+          remoteUpdatedAt.current
         );
-        setMessage("本場成績已上傳賽季排行榜");
+        setMessage(
+          `本場由伺服器裁決為 ${adjudicated.score} 分・學習加分 +${adjudicated.learningBonus}`
+        );
         void refresh();
       })
       .catch(e => setMessage(e instanceof Error ? e.message : "成績上傳失敗"));
@@ -164,11 +176,12 @@ export default function WorldRallyOnline({
     setBusy(true);
     try {
       if (direction === "up") {
-        await saveRallyProfile(
+        remoteUpdatedAt.current = await saveRallyProfile(
           user.id,
           name,
           { game: profile, learning: learningProfile },
-          storyState
+          storyState,
+          remoteUpdatedAt.current
         );
         setMessage("角色、錯題與學習歷程已上傳");
       } else {
@@ -365,7 +378,10 @@ export default function WorldRallyOnline({
                 <span>
                   <b>競賽暫停：{operations.sanctions[0].reason}</b>
                   <small>
-                    至 {new Date(operations.sanctions[0].banned_until).toLocaleString()}
+                    至{" "}
+                    {new Date(
+                      operations.sanctions[0].banned_until
+                    ).toLocaleString()}
                   </small>
                 </span>
               </div>
@@ -394,9 +410,14 @@ export default function WorldRallyOnline({
               <div className="wr-reward" key={r.id}>
                 <span>
                   <b>{r.title}</b>
-                  <small>{r.season}・{r.coins} 金幣</small>
+                  <small>
+                    {r.season}・{r.coins} 金幣
+                  </small>
                 </span>
-                <button disabled={busy || Boolean(r.claimed_at)} onClick={() => claim(r.id)}>
+                <button
+                  disabled={busy || Boolean(r.claimed_at)}
+                  onClick={() => claim(r.id)}
+                >
                   {r.claimed_at ? "已領取" : "領取"}
                 </button>
               </div>

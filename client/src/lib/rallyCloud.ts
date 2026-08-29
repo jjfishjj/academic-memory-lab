@@ -16,6 +16,29 @@ export type RallyRun = {
   race_ticket?: string | null;
 };
 
+export type RallyServerQuestion = {
+  id: string;
+  type: "listening" | "translation" | "cloze" | "diplomacy" | "confusable";
+  cefr: string;
+  phrase: string;
+  prompt: string;
+  answers: string[];
+};
+
+export type RallyRaceSession = {
+  ticket: string;
+  difficulty: "review" | "standard" | "challenge";
+  questions: RallyServerQuestion[];
+};
+
+export type RallyAnswerResult = {
+  correct: boolean;
+  correctIndex: number;
+  bonus: number;
+  nextDueAt: string;
+  memory: string;
+};
+
 export type RallySeason = {
   id: string;
   title: string;
@@ -75,11 +98,28 @@ export type RallySanction = {
 
 export async function startRallyRace(mapId: string) {
   if (!supabase) return null;
-  const { data, error } = await supabase.rpc("start_rally_race", {
+  const { data, error } = await supabase.rpc("start_rally_race_v2", {
     p_map_id: mapId,
   });
   if (error) throw error;
-  return data as string;
+  return data as RallyRaceSession;
+}
+
+export async function submitRallyAnswer(
+  ticket: string,
+  questionId: string,
+  selectedIndex: number,
+  responseMs: number
+) {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("submit_rally_answer", {
+    p_ticket: ticket,
+    p_question_id: questionId,
+    p_selected_index: selectedIndex,
+    p_response_ms: Math.max(250, Math.min(30000, Math.round(responseMs))),
+  });
+  if (error) throw error;
+  return data as RallyAnswerResult;
 }
 
 export async function getRallyUser(): Promise<User | null> {
@@ -112,33 +152,39 @@ export async function saveRallyProfile(
   userId: string,
   displayName: string,
   profile: unknown,
-  storyState: unknown
+  storyState: unknown,
+  expectedUpdatedAt?: string | null
 ) {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const { error } = await supabase
-    .from("rally_profiles")
-    .upsert(
-      {
-        user_id: userId,
-        display_name: displayName,
-        profile,
-        story_state: storyState,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
-  if (error) throw error;
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user?.id !== userId) throw new Error("雲端角色身分不一致");
+  const { data, error } = await supabase.rpc("save_rally_profile_v2", {
+    p_display_name: displayName,
+    p_profile: profile,
+    p_story_state: storyState,
+    p_expected_updated_at: expectedUpdatedAt ?? null,
+  });
+  if (error) {
+    if (error.code === "40001") {
+      throw new Error(
+        "雲端角色已在另一裝置更新；請先下載最新版，再重新套用變更"
+      );
+    }
+    throw error;
+  }
+  return data as string;
 }
 export async function submitRallyRun(run: RallyRun) {
   if (!supabase) throw new Error("Supabase 尚未設定");
   if (!run.race_ticket) throw new Error("本場未取得伺服器賽事票券");
-  const { error } = await supabase.rpc("finish_rally_race", {
+  const { data, error } = await supabase.rpc("finish_rally_race_v2", {
     p_ticket: run.race_ticket,
     p_display_name: run.display_name,
     p_rank: run.rank,
     p_ghost_path: run.ghost_path,
   });
   if (error) throw error;
+  return data as { runId: number; score: number; learningBonus: number };
 }
 export async function loadSeasonLeaderboard(season = "S01") {
   if (!supabase) return [];
@@ -229,7 +275,10 @@ export async function loadRallyOperations(userId?: string) {
       .order("name"),
   ]);
   const publicError =
-    seasonRes.error || countryRes.error || guildBoardRes.error || guildsRes.error;
+    seasonRes.error ||
+    countryRes.error ||
+    guildBoardRes.error ||
+    guildsRes.error;
   if (publicError) throw publicError;
   const season = seasonRes.data as RallySeason | null;
   let affiliation = null,
@@ -333,11 +382,47 @@ export async function claimRallyReward(rewardId: number) {
 }
 
 export type RallyAdminData = {
-  appeals: Array<RallyAppeal & { user_id: string; sanction_id: number | null; run_id: number | null }>;
-  sanctions: Array<RallySanction & { user_id: string; evidence: unknown; revoked_at: string | null; created_at: string }>;
+  questions: RallyQuestionAdmin[];
+  appeals: Array<
+    RallyAppeal & {
+      user_id: string;
+      sanction_id: number | null;
+      run_id: number | null;
+    }
+  >;
+  sanctions: Array<
+    RallySanction & {
+      user_id: string;
+      evidence: unknown;
+      revoked_at: string | null;
+      created_at: string;
+    }
+  >;
   invalidRuns: RallyRun[];
   seasons: RallySeason[];
-  audit: Array<{ id: number; action: string; target_type: string; target_id: string; detail: unknown; created_at: string }>;
+  audit: Array<{
+    id: number;
+    action: string;
+    target_type: string;
+    target_id: string;
+    detail: unknown;
+    created_at: string;
+  }>;
+};
+
+export type RallyQuestionAdmin = {
+  id: string;
+  map_id: "taipei" | "paris" | "tokyo";
+  question_type: RallyServerQuestion["type"];
+  cefr: "A1" | "A2" | "B1" | "B2" | "C1";
+  phrase: string;
+  prompt: string;
+  answers: string[];
+  correct_index: number;
+  memory_hint: string;
+  active: boolean;
+  approved: boolean;
+  updated_at: string;
 };
 
 export async function isRallyAdmin() {
@@ -349,38 +434,148 @@ export async function isRallyAdmin() {
 
 export async function loadRallyAdminData(): Promise<RallyAdminData> {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const [appeals, sanctions, runs, seasons, audit] = await Promise.all([
-    supabase.from("rally_appeals").select("id,user_id,sanction_id,run_id,reason,status,resolution,created_at").order("created_at", { ascending: false }).limit(50),
-    supabase.from("rally_sanctions").select("id,user_id,reason,evidence,banned_until,revoked_at,created_at").order("created_at", { ascending: false }).limit(50),
-    supabase.from("rally_runs").select("id,user_id,display_name,season,map_id,score,finish_ms,rank,ghost_path,raced_on,created_at,validation_flags").eq("is_valid", false).order("created_at", { ascending: false }).limit(30),
-    supabase.from("rally_seasons").select("id,title,status,starts_at,ends_at,daily_run_limit").order("starts_at", { ascending: false }),
-    supabase.from("rally_admin_audit").select("id,action,target_type,target_id,detail,created_at").order("created_at", { ascending: false }).limit(30),
-  ]);
-  const error = appeals.error || sanctions.error || runs.error || seasons.error || audit.error;
+  const [questions, appeals, sanctions, runs, seasons, audit] =
+    await Promise.all([
+      supabase
+        .from("rally_questions")
+        .select(
+          "id,map_id,question_type,cefr,phrase,prompt,answers,correct_index,memory_hint,active,approved,updated_at"
+        )
+        .order("updated_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("rally_appeals")
+        .select(
+          "id,user_id,sanction_id,run_id,reason,status,resolution,created_at"
+        )
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("rally_sanctions")
+        .select("id,user_id,reason,evidence,banned_until,revoked_at,created_at")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("rally_runs")
+        .select(
+          "id,user_id,display_name,season,map_id,score,finish_ms,rank,ghost_path,raced_on,created_at,validation_flags"
+        )
+        .eq("is_valid", false)
+        .order("created_at", { ascending: false })
+        .limit(30),
+      supabase
+        .from("rally_seasons")
+        .select("id,title,status,starts_at,ends_at,daily_run_limit")
+        .order("starts_at", { ascending: false }),
+      supabase
+        .from("rally_admin_audit")
+        .select("id,action,target_type,target_id,detail,created_at")
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+  const error =
+    questions.error ||
+    appeals.error ||
+    sanctions.error ||
+    runs.error ||
+    seasons.error ||
+    audit.error;
   if (error) throw error;
-  return { appeals: appeals.data as RallyAdminData["appeals"], sanctions: sanctions.data as RallyAdminData["sanctions"], invalidRuns: runs.data as RallyRun[], seasons: seasons.data as RallySeason[], audit: audit.data as RallyAdminData["audit"] };
+  return {
+    questions: questions.data as RallyQuestionAdmin[],
+    appeals: appeals.data as RallyAdminData["appeals"],
+    sanctions: sanctions.data as RallyAdminData["sanctions"],
+    invalidRuns: runs.data as RallyRun[],
+    seasons: seasons.data as RallySeason[],
+    audit: audit.data as RallyAdminData["audit"],
+  };
 }
 
-export async function resolveRallyAppeal(id: number, status: "approved" | "rejected", resolution: string) {
+export async function upsertRallyQuestion(
+  input: Omit<RallyQuestionAdmin, "active" | "approved" | "updated_at">
+) {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const { error } = await supabase.rpc("admin_resolve_rally_appeal", { p_appeal_id: id, p_status: status, p_resolution: resolution });
+  const { error } = await supabase.rpc("admin_upsert_rally_question", {
+    p_id: input.id,
+    p_map_id: input.map_id,
+    p_question_type: input.question_type,
+    p_cefr: input.cefr,
+    p_phrase: input.phrase,
+    p_prompt: input.prompt,
+    p_answers: input.answers,
+    p_correct_index: input.correct_index,
+    p_memory_hint: input.memory_hint,
+  });
+  if (error) throw error;
+}
+
+export async function reviewRallyQuestion(
+  id: string,
+  approved: boolean,
+  active: boolean
+) {
+  if (!supabase) throw new Error("Supabase 尚未設定");
+  const { error } = await supabase.rpc("admin_review_rally_question", {
+    p_id: id,
+    p_approved: approved,
+    p_active: active,
+  });
+  if (error) throw error;
+}
+
+export async function resolveRallyAppeal(
+  id: number,
+  status: "approved" | "rejected",
+  resolution: string
+) {
+  if (!supabase) throw new Error("Supabase 尚未設定");
+  const { error } = await supabase.rpc("admin_resolve_rally_appeal", {
+    p_appeal_id: id,
+    p_status: status,
+    p_resolution: resolution,
+  });
   if (error) throw error;
 }
 
 export async function revokeRallySanction(id: number, reason: string) {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const { error } = await supabase.rpc("admin_revoke_rally_sanction", { p_sanction_id: id, p_reason: reason });
+  const { error } = await supabase.rpc("admin_revoke_rally_sanction", {
+    p_sanction_id: id,
+    p_reason: reason,
+  });
   if (error) throw error;
 }
 
-export async function scheduleRallySeason(input: { id: string; title: string; startsAt: string; endsAt: string; dailyLimit: number }) {
+export async function scheduleRallySeason(input: {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  dailyLimit: number;
+}) {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const { error } = await supabase.rpc("admin_schedule_rally_season", { p_id: input.id, p_title: input.title, p_starts_at: input.startsAt, p_ends_at: input.endsAt, p_daily_run_limit: input.dailyLimit });
+  const { error } = await supabase.rpc("admin_schedule_rally_season", {
+    p_id: input.id,
+    p_title: input.title,
+    p_starts_at: input.startsAt,
+    p_ends_at: input.endsAt,
+    p_daily_run_limit: input.dailyLimit,
+  });
   if (error) throw error;
 }
 
-export async function settleRallySeason(input: { id: string; title: string; startsAt: string; endsAt: string }) {
+export async function settleRallySeason(input: {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+}) {
   if (!supabase) throw new Error("Supabase 尚未設定");
-  const { error } = await supabase.rpc("admin_settle_rally_season", { p_next_id: input.id, p_next_title: input.title, p_starts_at: input.startsAt, p_ends_at: input.endsAt });
+  const { error } = await supabase.rpc("admin_settle_rally_season", {
+    p_next_id: input.id,
+    p_next_title: input.title,
+    p_starts_at: input.startsAt,
+    p_ends_at: input.endsAt,
+  });
   if (error) throw error;
 }

@@ -31,14 +31,23 @@ import WorldRallyStory, {
   loadRallyStory,
   type StoryState,
 } from "@/components/WorldRallyStory";
-import { startRallyRace, type RallyRun } from "@/lib/rallyCloud";
+import {
+  startRallyRace,
+  submitRallyAnswer,
+  type RallyRun,
+} from "@/lib/rallyCloud";
 import "./WorldRally.css";
 
 type MapId = "taipei" | "paris" | "tokyo";
 type Phase = "lobby" | "race" | "quiz" | "boss" | "finish";
 type ItemId = "turbo" | "shield" | "echo";
 type Difficulty = "review" | "standard" | "challenge";
-type QuestionType = "listening" | "translation" | "cloze" | "diplomacy" | "confusable";
+type QuestionType =
+  | "listening"
+  | "translation"
+  | "cloze"
+  | "diplomacy"
+  | "confusable";
 type RallyQuestion = {
   id: string;
   type: QuestionType;
@@ -56,7 +65,12 @@ type LearningProfile = Record<
     correct: number;
     avgMs: number;
     wrongIds: Record<string, number>;
-    recent: { correct: boolean; responseMs: number; type: QuestionType; at: string }[];
+    recent: {
+      correct: boolean;
+      responseMs: number;
+      type: QuestionType;
+      at: string;
+    }[];
   }
 >;
 type QuizResult = {
@@ -243,10 +257,7 @@ const items: { id: ItemId; icon: string; name: string }[] = [
   { id: "shield", icon: "🛡️", name: "文化護盾" },
   { id: "echo", icon: "🔊", name: "回聲干擾" },
 ];
-const questions: Record<
-  MapId,
-  RallyQuestion[]
-> = {
+const questions: Record<MapId, RallyQuestion[]> = {
   taipei: [
     {
       id: "taipei-trust",
@@ -268,9 +279,30 @@ const questions: Record<
       ],
       memory: "先找共同地面，再替差異保留座位。",
     },
-    { id: "taipei-listen-cooperate", type: "listening", phrase: "We are ready to cooperate.", prompt: "你聽到的外交意圖是？", answers: ["願意合作", "拒絕會談", "要求撤離"], memory: "cooperate＝共同運作，想像代表一起推動齒輪。" },
-    { id: "taipei-cloze-dialogue", type: "cloze", phrase: "Open ___ builds lasting trust.", prompt: "填入最適合的字詞。", answers: ["dialogue", "silence", "pressure"], memory: "open dialogue 是開放對話；對話讓信任能持續。" },
-    { id: "taipei-confuse-resilient", type: "confusable", phrase: "resilient / resistant", prompt: "描述城市受災後恢復力，應選哪一個？", answers: ["resilient", "resistant", "reserved"], memory: "resilient 強調受衝擊後恢復；resistant 強調抵抗。" },
+    {
+      id: "taipei-listen-cooperate",
+      type: "listening",
+      phrase: "We are ready to cooperate.",
+      prompt: "你聽到的外交意圖是？",
+      answers: ["願意合作", "拒絕會談", "要求撤離"],
+      memory: "cooperate＝共同運作，想像代表一起推動齒輪。",
+    },
+    {
+      id: "taipei-cloze-dialogue",
+      type: "cloze",
+      phrase: "Open ___ builds lasting trust.",
+      prompt: "填入最適合的字詞。",
+      answers: ["dialogue", "silence", "pressure"],
+      memory: "open dialogue 是開放對話；對話讓信任能持續。",
+    },
+    {
+      id: "taipei-confuse-resilient",
+      type: "confusable",
+      phrase: "resilient / resistant",
+      prompt: "描述城市受災後恢復力，應選哪一個？",
+      answers: ["resilient", "resistant", "reserved"],
+      memory: "resilient 強調受衝擊後恢復；resistant 強調抵抗。",
+    },
   ],
   paris: [
     {
@@ -289,9 +321,30 @@ const questions: Record<
       answers: ["找到共識", "封鎖道路", "更換代表"],
       memory: "雙方走到同一塊 terrain（土地）上握手。",
     },
-    { id: "paris-listen-thanks", type: "listening", phrase: "Merci pour votre coopération.", prompt: "對方表達了什麼？", answers: ["感謝您的合作", "拒絕您的提案", "請延後會議"], memory: "Merci 是謝謝；coopération 與英文 cooperation 同源。" },
-    { id: "paris-cloze-dialogue", type: "cloze", phrase: "Nous souhaitons poursuivre le ___.", prompt: "填入『對話』。", answers: ["dialogue", "conflit", "secret"], memory: "dialogue 法文與英文拼法相同。" },
-    { id: "paris-confuse-entente", type: "confusable", phrase: "entente / attente", prompt: "哪個字表示理解或協議？", answers: ["entente", "attente", "entrée"], memory: "entente＝協議；attente＝等待；entrée＝入口。" },
+    {
+      id: "paris-listen-thanks",
+      type: "listening",
+      phrase: "Merci pour votre coopération.",
+      prompt: "對方表達了什麼？",
+      answers: ["感謝您的合作", "拒絕您的提案", "請延後會議"],
+      memory: "Merci 是謝謝；coopération 與英文 cooperation 同源。",
+    },
+    {
+      id: "paris-cloze-dialogue",
+      type: "cloze",
+      phrase: "Nous souhaitons poursuivre le ___.",
+      prompt: "填入『對話』。",
+      answers: ["dialogue", "conflit", "secret"],
+      memory: "dialogue 法文與英文拼法相同。",
+    },
+    {
+      id: "paris-confuse-entente",
+      type: "confusable",
+      phrase: "entente / attente",
+      prompt: "哪個字表示理解或協議？",
+      answers: ["entente", "attente", "entrée"],
+      memory: "entente＝協議；attente＝等待；entrée＝入口。",
+    },
   ],
   tokyo: [
     {
@@ -310,9 +363,30 @@ const questions: Record<
       answers: ["形成共識", "保持沉默", "單方面決定"],
       memory: "合意＝意見合在一起；形成＝塑造成形。",
     },
-    { id: "tokyo-listen-thanks", type: "listening", phrase: "ご協力ありがとうございます。", prompt: "這句話的功能是？", answers: ["感謝合作", "提出抗議", "結束談判"], memory: "協力＝合作；ありがとうございます＝感謝。" },
-    { id: "tokyo-cloze-dialogue", type: "cloze", phrase: "対話を___ましょう。", prompt: "填入『繼續』最合適的形式。", answers: ["続け", "閉じ", "忘れ"], memory: "続ける＝繼續；閉じる＝關閉；忘れる＝忘記。" },
-    { id: "tokyo-confuse-koui", type: "confusable", phrase: "合意 / 行為", prompt: "外交協商達成『共識』應使用？", answers: ["合意", "行為", "好意"], memory: "三者都可讀作 こうい；合意才是共識。" },
+    {
+      id: "tokyo-listen-thanks",
+      type: "listening",
+      phrase: "ご協力ありがとうございます。",
+      prompt: "這句話的功能是？",
+      answers: ["感謝合作", "提出抗議", "結束談判"],
+      memory: "協力＝合作；ありがとうございます＝感謝。",
+    },
+    {
+      id: "tokyo-cloze-dialogue",
+      type: "cloze",
+      phrase: "対話を___ましょう。",
+      prompt: "填入『繼續』最合適的形式。",
+      answers: ["続け", "閉じ", "忘れ"],
+      memory: "続ける＝繼續；閉じる＝關閉；忘れる＝忘記。",
+    },
+    {
+      id: "tokyo-confuse-koui",
+      type: "confusable",
+      phrase: "合意 / 行為",
+      prompt: "外交協商達成『共識』應使用？",
+      answers: ["合意", "行為", "好意"],
+      memory: "三者都可讀作 こうい；合意才是共識。",
+    },
   ],
 };
 const questionTypeLabels: Record<QuestionType, string> = {
@@ -323,9 +397,33 @@ const questionTypeLabels: Record<QuestionType, string> = {
   confusable: "易混淆",
 };
 const initialLearning: LearningProfile = {
-  taipei: { level: 1, streak: 0, total: 0, correct: 0, avgMs: 0, wrongIds: {}, recent: [] },
-  paris: { level: 1, streak: 0, total: 0, correct: 0, avgMs: 0, wrongIds: {}, recent: [] },
-  tokyo: { level: 1, streak: 0, total: 0, correct: 0, avgMs: 0, wrongIds: {}, recent: [] },
+  taipei: {
+    level: 1,
+    streak: 0,
+    total: 0,
+    correct: 0,
+    avgMs: 0,
+    wrongIds: {},
+    recent: [],
+  },
+  paris: {
+    level: 1,
+    streak: 0,
+    total: 0,
+    correct: 0,
+    avgMs: 0,
+    wrongIds: {},
+    recent: [],
+  },
+  tokyo: {
+    level: 1,
+    streak: 0,
+    total: 0,
+    correct: 0,
+    avgMs: 0,
+    wrongIds: {},
+    recent: [],
+  },
 };
 const difficultyLabels: Record<Difficulty, string> = {
   review: "複習 A2",
@@ -340,7 +438,12 @@ function loadLearningProfile(): LearningProfile {
     return Object.fromEntries(
       (Object.keys(initialLearning) as MapId[]).map(id => [
         id,
-        { ...initialLearning[id], ...saved[id], wrongIds: saved[id]?.wrongIds || {}, recent: saved[id]?.recent || [] },
+        {
+          ...initialLearning[id],
+          ...saved[id],
+          wrongIds: saved[id]?.wrongIds || {},
+          recent: saved[id]?.recent || [],
+        },
       ])
     ) as LearningProfile;
   } catch {
@@ -651,6 +754,10 @@ export default function WorldRally() {
     [rank, setRank] = useState(4),
     [gate, setGate] = useState(0),
     [answer, setAnswer] = useState<number | null>(null),
+    [correctAnswer, setCorrectAnswer] = useState<number | null>(null),
+    [answerMemory, setAnswerMemory] = useState(""),
+    [answerBonus, setAnswerBonus] = useState(0),
+    [answerVerified, setAnswerVerified] = useState(false),
     [quizChoice, setQuizChoice] = useState(0),
     [quizTime, setQuizTime] = useState(7),
     [difficulty, setDifficulty] = useState<Difficulty>("review"),
@@ -660,6 +767,7 @@ export default function WorldRally() {
     ),
     [quizResults, setQuizResults] = useState<QuizResult[]>([]),
     [seasonBonus, setSeasonBonus] = useState(0),
+    [starting, setStarting] = useState(false),
     [raceId, setRaceId] = useState(0),
     [item, setItem] = useState<ItemId | null>(null),
     [notice, setNotice] = useState(""),
@@ -687,6 +795,8 @@ export default function WorldRally() {
     runStarted = useRef(0),
     ghostPath = useRef<number[][]>([]),
     lastGhostSample = useRef(0),
+    answerPending = useRef(false),
+    quizResolved = useRef(false),
     raceTicket = useRef<string | null>(null);
   const map = maps.find(m => m.id === mapId)!,
     question = raceQuestions[gate] || questions[mapId][gate],
@@ -774,7 +884,12 @@ export default function WorldRally() {
       if (phase === "race" && cp > triggered.current && cp <= 2) {
         triggered.current = cp;
         setGate(cp - 1);
+        quizResolved.current = false;
         setAnswer(null);
+        setCorrectAnswer(null);
+        setAnswerMemory("");
+        setAnswerBonus(0);
+        setAnswerVerified(false);
         setQuizChoice(0);
         questionStarted.current = Date.now();
         setPhase("quiz");
@@ -788,12 +903,52 @@ export default function WorldRally() {
     },
     [item, itemDuration, profile.talents, dailyGhost, phase]
   );
-  function resolveQuiz(choice: number | null) {
-    if (phase !== "quiz" || answer !== null) return;
-    setAnswer(choice);
-    const correct = choice === 0,
-      responseMs = Math.max(0, Date.now() - questionStarted.current),
-      previous = learning[mapId],
+  async function resolveQuiz(choice: number | null) {
+    if (
+      phase !== "quiz" ||
+      answer !== null ||
+      answerPending.current ||
+      quizResolved.current
+    )
+      return;
+    answerPending.current = true;
+    quizResolved.current = true;
+    const selectedIndex = choice ?? -1,
+      responseMs = Math.max(250, Date.now() - questionStarted.current);
+    setAnswer(selectedIndex);
+    setCorrectAnswer(null);
+    setAnswerBonus(0);
+    setAnswerVerified(false);
+    let correct = choice === 0,
+      verifiedCorrectIndex = 0,
+      verifiedBonus = 0,
+      memory = question.memory,
+      serverVerified = false;
+    if (raceTicket.current) {
+      try {
+        const verdict = await submitRallyAnswer(
+          raceTicket.current,
+          question.id,
+          selectedIndex,
+          responseMs
+        );
+        if (verdict) {
+          correct = verdict.correct;
+          verifiedCorrectIndex = verdict.correctIndex;
+          verifiedBonus = verdict.bonus;
+          memory = verdict.memory || memory;
+          serverVerified = true;
+        }
+      } catch {
+        setNotice("雲端裁決未完成・本題僅計本機練習，不核發賽季分");
+      }
+    }
+    setCorrectAnswer(verifiedCorrectIndex);
+    setAnswerMemory(memory);
+    setAnswerBonus(verifiedBonus);
+    setAnswerVerified(serverVerified);
+    if (verifiedBonus > 0) setSeasonBonus(value => value + verifiedBonus);
+    const previous = learning[mapId],
       nextTotal = previous.total + 1,
       nextCorrect = previous.correct + (correct ? 1 : 0),
       nextWrongIds = { ...previous.wrongIds };
@@ -810,7 +965,12 @@ export default function WorldRally() {
       wrongIds: nextWrongIds,
       recent: [
         ...previous.recent,
-        { correct, responseMs, type: question.type, at: new Date().toISOString() },
+        {
+          correct,
+          responseMs,
+          type: question.type,
+          at: new Date().toISOString(),
+        },
       ].slice(-20),
       level: Math.min(3, 1 + Math.floor(nextCorrect / 4)),
     };
@@ -824,30 +984,31 @@ export default function WorldRally() {
       ...results,
       { correct, responseMs, difficulty },
     ]);
-    if (choice === 0) {
+    if (correct) {
       if (gate === 0) {
         const rewardXp = difficulty === "challenge" ? 200 : 120;
         setXp(v => v + rewardXp);
         setItem("turbo");
-        if (difficulty === "challenge") setSeasonBonus(v => v + 75);
         setNotice(
           difficulty === "challenge"
-            ? "🔥 B2 精準作答！超級渦輪・賽季 +75"
+            ? serverVerified
+              ? `🔥 B2 精準作答！超級渦輪・伺服器核發 +${verifiedBonus}`
+              : "🔥 B2 精準作答！本機練習不核發賽季分"
             : "⚡ 答對！語彙渦輪已啟動"
         );
         clearTimeout(timer.current);
         timer.current = window.setTimeout(
           () => setItem(null),
-          (difficulty === "challenge" ? 8500 : 5000) +
-            talent("聲音韻律") * 2000
+          (difficulty === "challenge" ? 8500 : 5000) + talent("聲音韻律") * 2000
         );
       } else {
         setXp(v => v + (difficulty === "challenge" ? 260 : 180));
         setItem(difficulty === "challenge" ? "echo" : "shield");
-        if (difficulty === "challenge") setSeasonBonus(v => v + 125);
         setNotice(
           difficulty === "challenge"
-            ? "💎 B2 外交突破！稀有回聲干擾・賽季 +125"
+            ? serverVerified
+              ? `💎 B2 外交突破！稀有道具・伺服器核發 +${verifiedBonus}`
+              : "💎 B2 外交突破！本機練習不核發賽季分"
             : "🛡️ 外交判斷成功・取得文化護盾"
         );
         clearTimeout(timer.current);
@@ -860,11 +1021,18 @@ export default function WorldRally() {
           : "判斷未命中・未獲得加成，賽事繼續"
       );
     }
+    if (raceTicket.current && !serverVerified) {
+      setNotice("雲端裁決未完成・本題僅計本機練習，不核發賽季分");
+    }
+    answerPending.current = false;
     clearTimeout(quizReturnTimer.current);
-    quizReturnTimer.current = window.setTimeout(() => {
-      setAnswer(null);
-      setPhase("race");
-    }, choice === null ? 0 : 650);
+    quizReturnTimer.current = window.setTimeout(
+      () => {
+        setAnswer(null);
+        setPhase("race");
+      },
+      choice === null ? 0 : 650
+    );
   }
   useEffect(() => {
     const key = (e: KeyboardEvent, on: boolean) => {
@@ -878,13 +1046,9 @@ export default function WorldRally() {
           setQuizChoice(v => (v + 1) % visibleAnswerCount);
           return;
         }
-        if (
-          phase === "quiz" &&
-          on &&
-          (e.key === "Enter" || e.key === " ")
-        ) {
+        if (phase === "quiz" && on && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          resolveQuiz(quizChoice);
+          void resolveQuiz(quizChoice);
           return;
         }
         if (["ArrowLeft", "a", "A"].includes(e.key)) controls.current.left = on;
@@ -915,7 +1079,10 @@ export default function WorldRally() {
         return Math.max(0, value - 0.1);
       });
     }, 100);
-    const expiry = window.setTimeout(() => resolveQuiz(null), duration * 1000);
+    const expiry = window.setTimeout(
+      () => void resolveQuiz(null),
+      duration * 1000
+    );
     return () => {
       clearInterval(id);
       clearTimeout(expiry);
@@ -930,15 +1097,17 @@ export default function WorldRally() {
     setProfile(p);
     localStorage.setItem("memgenius-rally-profile", JSON.stringify(p));
   }
-  function start() {
-    if (!canEnter) return;
+  async function start() {
+    if (!canEnter || starting) return;
+    setStarting(true);
     triggered.current = 0;
     pickups.current = new Set();
     hazards.current = new Set();
     ghostPath.current = [];
     lastGhostSample.current = 0;
-    runStarted.current = Date.now() + 2700;
     raceTicket.current = null;
+    answerPending.current = false;
+    quizResolved.current = false;
     const nextDifficulty = difficultyFor(learning[mapId]),
       rotation = learning[mapId].total % questions[mapId].length,
       rotated = [
@@ -952,20 +1121,43 @@ export default function WorldRally() {
       );
     setDifficulty(nextDifficulty);
     setRaceQuestions(
-      rankedQuestions.slice(0, 2).map((q, i) =>
-        adaptQuestion(q, nextDifficulty, i)
-      )
+      rankedQuestions
+        .slice(0, 2)
+        .map((q, i) => adaptQuestion(q, nextDifficulty, i))
     );
     setQuizResults([]);
     setSeasonBonus(0);
     setRaceId(id => id + 1);
-    void startRallyRace(mapId)
-      .then(ticket => {
-        raceTicket.current = ticket;
-      })
-      .catch(() => {
-        raceTicket.current = null;
-      });
+    setNotice("正在取得伺服器賽事票券…");
+    try {
+      const session = await startRallyRace(mapId);
+      if (session) {
+        raceTicket.current = session.ticket;
+        setDifficulty(session.difficulty);
+        setRaceQuestions(
+          session.questions.map((serverQuestion, index) =>
+            adaptQuestion(
+              {
+                id: serverQuestion.id,
+                type: serverQuestion.type,
+                phrase: serverQuestion.phrase,
+                prompt: serverQuestion.prompt,
+                answers: serverQuestion.answers,
+                memory: "伺服器裁決後顯示記憶提示。",
+              },
+              session.difficulty,
+              index
+            )
+          )
+        );
+        setNotice("🔐 已取得伺服器票券・學習獎勵由 RPC 裁決");
+      } else {
+        setNotice("本機練習模式・成績不寫入全球賽季");
+      }
+    } catch {
+      raceTicket.current = null;
+      setNotice("雲端票券不可用・已切換本機練習模式");
+    }
     setDistance(0);
     setSpeed(0);
     setRank(4);
@@ -974,12 +1166,17 @@ export default function WorldRally() {
     setQuizTime(7);
     setXp(0);
     setAnswer(null);
+    setCorrectAnswer(null);
+    setAnswerMemory("");
+    setAnswerBonus(0);
+    setAnswerVerified(false);
     setItem(talent("情緒共鳴") ? "shield" : null);
-    setNotice("");
     setLatestRun(null);
+    runStarted.current = Date.now() + 2700;
     setCountdown(3);
     setTownOpen(false);
     setPhase("race");
+    setStarting(false);
   }
   function upgrade(t: string) {
     if (profile.points)
@@ -999,7 +1196,8 @@ export default function WorldRally() {
     }
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(question.phrase);
-    utterance.lang = mapId === "paris" ? "fr-FR" : mapId === "tokyo" ? "ja-JP" : "en-US";
+    utterance.lang =
+      mapId === "paris" ? "fr-FR" : mapId === "tokyo" ? "ja-JP" : "en-US";
     utterance.rate = difficulty === "review" ? 0.8 : 0.95;
     speechSynthesis.speak(utterance);
   }
@@ -1098,9 +1296,7 @@ export default function WorldRally() {
             key={raceId}
             controls={controls}
             running={
-              (phase === "race" || phase === "quiz") &&
-              !hit &&
-              countdown === 0
+              (phase === "race" || phase === "quiz") && !hit && countdown === 0
             }
             map={map}
             color={racers[racer].color}
@@ -1141,20 +1337,29 @@ export default function WorldRally() {
               latestRun={latestRun}
               onGhost={setDailyGhost}
               onLearningRestore={remoteLearning => {
-                if (!remoteLearning || typeof remoteLearning !== "object") return;
+                if (!remoteLearning || typeof remoteLearning !== "object")
+                  return;
                 const restored = Object.fromEntries(
                   (Object.keys(initialLearning) as MapId[]).map(id => {
-                    const remote = (remoteLearning as Partial<LearningProfile>)[id];
-                    return [id, {
-                      ...initialLearning[id],
-                      ...remote,
-                      wrongIds: remote?.wrongIds || {},
-                      recent: remote?.recent || [],
-                    }];
+                    const remote = (remoteLearning as Partial<LearningProfile>)[
+                      id
+                    ];
+                    return [
+                      id,
+                      {
+                        ...initialLearning[id],
+                        ...remote,
+                        wrongIds: remote?.wrongIds || {},
+                        recent: remote?.recent || [],
+                      },
+                    ];
                   })
                 ) as LearningProfile;
                 setLearning(restored);
-                localStorage.setItem("memgenius-rally-learning", JSON.stringify(restored));
+                localStorage.setItem(
+                  "memgenius-rally-learning",
+                  JSON.stringify(restored)
+                );
               }}
               onRestore={(remoteProfile, remoteStory) => {
                 const restored = {
@@ -1269,10 +1474,11 @@ export default function WorldRally() {
               </div>
               <button
                 className="wr-primary"
-                disabled={!canEnter}
-                onClick={start}
+                disabled={!canEnter || starting}
+                onClick={() => void start()}
               >
-                進入 {map.city} 大獎賽 <ChevronRight />
+                {starting ? "正在建立賽事…" : `進入 ${map.city} 大獎賽`}{" "}
+                <ChevronRight />
               </button>
             </div>
           </div>
@@ -1295,7 +1501,10 @@ export default function WorldRally() {
               </div>
             </div>
             <WorldRallyStory state={story} onChange={setStory} />
-            <section className="wr-learning-dashboard" aria-label="語言學習分析">
+            <section
+              className="wr-learning-dashboard"
+              aria-label="語言學習分析"
+            >
               <div className="wr-learning-head">
                 <span>
                   <BrainCircuit />
@@ -1313,9 +1522,17 @@ export default function WorldRally() {
                     <article key={country.id}>
                       <span>{country.flag}</span>
                       <div>
-                        <b>{country.city}・Lv.{data.level}</b>
-                        <i><em style={{ width: `${accuracy}%` }} /></i>
-                        <small>{data.total ? `正確率 ${accuracy}%・${(data.avgMs / 1000).toFixed(1)} 秒` : "尚未建立學習資料"}</small>
+                        <b>
+                          {country.city}・Lv.{data.level}
+                        </b>
+                        <i>
+                          <em style={{ width: `${accuracy}%` }} />
+                        </i>
+                        <small>
+                          {data.total
+                            ? `正確率 ${accuracy}%・${(data.avgMs / 1000).toFixed(1)} 秒`
+                            : "尚未建立學習資料"}
+                        </small>
                       </div>
                     </article>
                   );
@@ -1330,10 +1547,14 @@ export default function WorldRally() {
                         key={`${result.at}-${i}`}
                         className={result.correct ? "correct" : "wrong"}
                         title={`${(result.responseMs / 1000).toFixed(1)} 秒`}
-                        style={{ height: `${Math.max(12, Math.min(100, result.responseMs / 80))}%` }}
+                        style={{
+                          height: `${Math.max(12, Math.min(100, result.responseMs / 80))}%`,
+                        }}
                       />
                     ))}
-                    {!learning[mapId].recent.length && <small>完成題目後顯示</small>}
+                    {!learning[mapId].recent.length && (
+                      <small>完成題目後顯示</small>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -1345,11 +1566,14 @@ export default function WorldRally() {
                         .slice(0, 3)
                         .map(([id, count]) => (
                           <span key={id}>
-                            {questions[mapId].find(q => q.id === id)?.phrase || id}
+                            {questions[mapId].find(q => q.id === id)?.phrase ||
+                              id}
                             <small>錯 {count} 次</small>
                           </span>
                         ))
-                    ) : <small>目前沒有待複習詞彙</small>}
+                    ) : (
+                      <small>目前沒有待複習詞彙</small>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1550,13 +1774,13 @@ export default function WorldRally() {
               <b>{quizTime.toFixed(1)}s</b>
             </div>
             <div className="wr-quiz-timer">
-              <span
-                style={{ width: `${(quizTime / quizDuration) * 100}%` }}
-              />
+              <span style={{ width: `${(quizTime / quizDuration) * 100}%` }} />
             </div>
             <h2>
               {map.flag}{" "}
-              {question.type === "listening" ? "聽音選擇正確意思" : `「${question.phrase}」`}
+              {question.type === "listening"
+                ? "聽音選擇正確意思"
+                : `「${question.phrase}」`}
             </h2>
             {question.type === "listening" && (
               <button className="wr-listen-button" onClick={speakQuestion}>
@@ -1580,42 +1804,48 @@ export default function WorldRally() {
               {talent("聲音韻律") > 0 && <span>聲音韻律：答對延長渦輪</span>}
             </div>
             <div className="wr-quick-answers">
-              {question.answers
-                .slice(0, visibleAnswerCount)
-                .map((a, i) => (
-                  <button
-                    key={a}
-                    onClick={() => {
-                      setQuizChoice(i);
-                      resolveQuiz(i);
-                    }}
-                    className={
-                      answer === i
-                        ? i === 0
-                          ? "right"
-                          : "wrong"
-                        : quizChoice === i
-                          ? "selected"
+              {question.answers.slice(0, visibleAnswerCount).map((a, i) => (
+                <button
+                  key={a}
+                  onClick={() => {
+                    setQuizChoice(i);
+                    void resolveQuiz(i);
+                  }}
+                  className={
+                    answer !== null && correctAnswer !== null
+                      ? i === correctAnswer
+                        ? "right"
+                        : answer === i
+                          ? "wrong"
                           : ""
-                    }
-                  >
-                    <i>{String.fromCharCode(65 + i)}</i>
-                    {a}
-                  </button>
-                ))}
+                      : quizChoice === i
+                        ? "selected"
+                        : ""
+                  }
+                >
+                  <i>{String.fromCharCode(65 + i)}</i>
+                  {a}
+                </button>
+              ))}
             </div>
             <div className="wr-quiz-instruction">
               {answer === null
                 ? "← → 選擇・Enter 確認・手機可左右滑動"
-                : answer === 0
-                  ? gate === 0
-                    ? difficulty === "challenge"
-                      ? "+200 XP・超級渦輪・賽季 +75"
-                      : "+120 XP・語彙渦輪啟動"
-                    : difficulty === "challenge"
-                      ? "+260 XP・稀有道具・賽季 +125"
-                      : "+180 XP・文化護盾取得"
-                  : question.memory}
+                : correctAnswer === null
+                  ? "伺服器正在裁決答案…"
+                  : answer === correctAnswer
+                    ? gate === 0
+                      ? difficulty === "challenge"
+                        ? answerVerified
+                          ? `+200 XP・超級渦輪・伺服器核發 +${answerBonus}`
+                          : "+200 XP・超級渦輪・本機練習不計賽季分"
+                        : "+120 XP・語彙渦輪啟動"
+                      : difficulty === "challenge"
+                        ? answerVerified
+                          ? `+260 XP・稀有道具・伺服器核發 +${answerBonus}`
+                          : "+260 XP・稀有道具・本機練習不計賽季分"
+                        : "+180 XP・文化護盾取得"
+                    : answerMemory || question.memory}
             </div>
           </aside>
         )}
@@ -1714,8 +1944,12 @@ export default function WorldRally() {
             <button className="wr-primary" onClick={() => setPhase("lobby")}>
               <Globe2 /> 返回世界地圖
             </button>
-            <button className="wr-secondary" onClick={start}>
-              <RotateCcw /> 再跑一場
+            <button
+              className="wr-secondary"
+              disabled={starting}
+              onClick={() => void start()}
+            >
+              <RotateCcw /> {starting ? "正在建立賽事…" : "再跑一場"}
             </button>
           </div>
         )}
